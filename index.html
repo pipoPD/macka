@@ -657,12 +657,13 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(cnUn||!cfgOk)return;
     cnUn=onSnapshot(cnRef,function(snap){
       if(!snap.exists()){
-        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser({src:CENNIK_WEB.src,torty:CENNIK_WEB.torty,kolace:CENNIK_WEB.kolace,napoje:CENNIK_WEB.napoje,napSeed:1}))).catch(fail)}
+        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser({src:CENNIK_WEB.src,torty:CENNIK_WEB.torty,kolace:CENNIK_WEB.kolace,napoje:CENNIK_WEB.napoje,napSeed:1,kolAdd:1}))).catch(fail)}
         return;
       }
       var d=snap.data();
-      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[],napSeed:d.napSeed||0};
+      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[],napSeed:d.napSeed||0,kolAdd:d.kolAdd||0};
       if(!CN.napSeed&&!CN.napoje.length){CN.napoje=JSON.parse(JSON.stringify(CENNIK_WEB.napoje));CN.napSeed=1;cnSave()}
+      if(!CN.kolAdd){var have={};CN.kolace.forEach(function(x){have[x.id]=1});CENNIK_WEB.kolaceNove.forEach(function(x){if(!have[x.id])CN.kolace.push(JSON.parse(JSON.stringify(x)))});CN.kolAdd=1;cnSave()}
       cnGot=true;cnRefresh();
     },fail);
   }
