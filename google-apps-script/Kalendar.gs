@@ -162,6 +162,25 @@ function handle_(p) {
       for (var i = 0; i < th.length; i += 100) GmailApp.moveThreadsToTrash(th.slice(i, i + 100));
       return out_({ ok: true, n: th.length });
     }
+    if (p.action === 'mail_mark') {
+      var ids2 = [].concat(p.ids || p.id || []), th2 = [];
+      ids2.forEach(function (id) { var x = GmailApp.getThreadById(id); if (x) th2.push(x); });
+      for (var k = 0; k < th2.length; k += 100) {
+        var part = th2.slice(k, k + 100);
+        if (p.op === 'read') GmailApp.markThreadsRead(part);
+        else if (p.op === 'unread') GmailApp.markThreadsUnread(part);
+        else if (p.op === 'archive') GmailApp.moveThreadsToArchive(part);
+        else if (p.op === 'inbox') GmailApp.moveThreadsToInbox(part);
+        else if (p.op === 'star' || p.op === 'unstar') {
+          part.forEach(function (t) {
+            var ms = t.getMessages();
+            if (p.op === 'star') { if (!t.hasStarredMessages()) GmailApp.starMessage(ms[ms.length - 1]); }
+            else GmailApp.unstarMessages(ms);
+          });
+        } else return out_({ ok: false, error: 'neznama akcia' });
+      }
+      return out_({ ok: true, n: th2.length });
+    }
     if (p.action === 'mail_read') {
       var th0 = GmailApp.getThreadById(p.id);
       if (!th0) return out_({ ok: false, error: 'email sa nenasiel' });
@@ -227,7 +246,7 @@ function mailGet_(p, tz) {
     };
   });
   if (p.markRead && t.isUnread()) t.markRead();
-  return { ok: true, id: t.getId(), subject: t.getFirstMessageSubject() || '', messages: ms, me: Session.getEffectiveUser().getEmail() };
+  return { ok: true, id: t.getId(), subject: t.getFirstMessageSubject() || '', messages: ms, me: Session.getEffectiveUser().getEmail(), star: t.hasStarredMessages(), inbox: t.isInInbox() };
 }
 
 // Odpoveď na posledný e-mail vo vlákne. Ak má Gmail nastavenú adresu firmy

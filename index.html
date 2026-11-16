@@ -198,6 +198,12 @@ details.card summary{cursor:pointer;font-weight:700}
 .sm-chk{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:7px;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--berry-ink);background:var(--surface)}
 .sm-row.sel{border-color:var(--berry);background:color-mix(in srgb,var(--berry) 8%,var(--surface))}
 .sm-row.sel .sm-chk{background:var(--berry);border-color:var(--berry)}
+.sm-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.sm-acts button{font:inherit;font-size:.86rem;font-weight:700;padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.sm-acts button:hover:not(:disabled){border-color:var(--berry)}
+.sm-acts button:disabled{opacity:.45;cursor:default}
+.sm-acts button.del{color:var(--berry)}
+.sm-star{color:#E8A400}
 .sm-selbar{align-items:center;position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0;margin-top:6px}
 .sm-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .sm-top b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
@@ -1128,7 +1134,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(ch){kData={};kErr="";kSetup=false}
       if(location.hash==="#kalendar"&&!kInField()&&!kForm)renderK(ch);
       var sch=MC.url?mch:(ch||mch);
-      if(sch){sList={};sThread=null;sOpen=null;sErr="";try{localStorage.removeItem("mt_cal_mail_inbox");localStorage.removeItem("mt_cal_mail_sent")}catch(e){}}
+      if(sch){sList={};sThread=null;sOpen=null;sErr="";try{localStorage.removeItem("mt_cal_mail_inbox");localStorage.removeItem("mt_cal_mail_sent");localStorage.removeItem("mt_cal_mail_starred")}catch(e){}}
       if(location.hash==="#spravy"&&!sInField())renderS(sch);
     },fail);
   }
@@ -1526,7 +1532,42 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function sApiCfg(){return MC.url&&MC.token?MC:KC}
   function sOn(){var c=sApiCfg();return !!(c.url&&c.token)}
   function sInField(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#s-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName))}
-  function sQuery(){return sTab==="sent"?"in:sent":sTab==="search"?(sQ||"in:inbox"):"in:inbox"}
+  function sQuery(){return sTab==="sent"?"in:sent":sTab==="starred"?"is:starred":sTab==="search"?(sQ||"in:inbox"):"in:inbox"}
+  var STABS=["inbox","sent","starred"];
+  function sSaveCache(){try{STABS.forEach(function(k){if(sList[k])localStorage.setItem("mt_cal_mail_"+k,JSON.stringify(sList[k]))})}catch(e){}}
+  // Úprava zoznamov po akcii (bez nového načítania)
+  function sApply(ids,op){
+    Object.keys(sList).forEach(function(k){
+      var L=sList[k];if(!L||!L.threads)return;
+      L.threads=L.threads.filter(function(x){
+        if(ids.indexOf(x.id)<0)return true;
+        if(op==="trash")return false;
+        if(op==="archive"&&k==="inbox")return false;
+        if(op==="unstar"&&k==="starred")return false;
+        if(op==="read")x.unread=false;
+        if(op==="unread")x.unread=true;
+        if(op==="star")x.star=true;
+        if(op==="unstar")x.star=false;
+        return true;
+      });
+    });
+    if(op==="star")delete sList.starred;
+    if(op==="inbox")delete sList.inbox;
+    if(sThread&&ids.indexOf(sThread.id)>=0){if(op==="star")sThread.star=true;if(op==="unstar")sThread.star=false;if(op==="archive")sThread.inbox=false;if(op==="inbox")sThread.inbox=true}
+    sSaveCache();
+  }
+  var SOPS={read:["Označené ako prečítané","Označené ako prečítané: "],unread:["Označené ako neprečítané","Označené ako neprečítané: "],star:["Pridaná hviezdička","Pridaná hviezdička: "],unstar:["Hviezdička odobratá","Hviezdička odobratá: "],archive:["Archivované","Archivované: "],inbox:["Presunuté do Doručených","Presunuté do Doručených: "],trash:["E-mail zmazaný","Zmazané e-maily: "]};
+  function sDo(ids,op,btn,after){
+    if(!ids.length)return;
+    if(op==="trash"&&!confirm(ids.length===1?"Zmazať tento e-mail? Presunie sa do Koša v Gmaile (obnoviť sa dá 30 dní).":"Zmazať "+ids.length+" e-mailov? Presunú sa do Koša v Gmaile (obnoviť sa dajú 30 dní)."))return;
+    sBusy=true;if(btn)btn.disabled=true;
+    var body=op==="trash"?{action:"mail_trash",ids:ids}:{action:"mail_mark",ids:ids,op:op};
+    kApi(body,sApiCfg()).then(function(){
+      sBusy=false;sApply(ids,op);sSel=null;
+      toast(ids.length===1?SOPS[op][0]:SOPS[op][1]+ids.length);
+      if(after)after();renderS();
+    }).catch(function(e){sBusy=false;if(btn)btn.disabled=false;toast(sErrMsg(e))});
+  }
   function sWhen(dt){
     if(!dt)return "";
     var d=dt.slice(0,10),t=dt.slice(11,16),today=kToday();
@@ -1575,11 +1616,15 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function sListView(){
     var L=sList[sTab]||(sTab!=="search"?(function(){try{return JSON.parse(localStorage.getItem("mt_cal_mail_"+sTab)||"null")}catch(e){return null}})():null);
-    var h='<div class="tabs" role="tablist"><button role="tab" data-act="sTab" data-v="inbox" aria-selected="'+(sTab==="inbox")+'">Doručené</button><button role="tab" data-act="sTab" data-v="sent" aria-selected="'+(sTab==="sent")+'">Odoslané</button><button role="tab" data-act="sTab" data-v="search" aria-selected="'+(sTab==="search")+'">Hľadať</button></div>';
+    var h='<div class="tabs" role="tablist"><button role="tab" data-act="sTab" data-v="inbox" aria-selected="'+(sTab==="inbox")+'">Doručené</button><button role="tab" data-act="sTab" data-v="sent" aria-selected="'+(sTab==="sent")+'">Odoslané</button><button role="tab" data-act="sTab" data-v="starred" aria-selected="'+(sTab==="starred")+'" aria-label="S hviezdičkou">★</button><button role="tab" data-act="sTab" data-v="search" aria-selected="'+(sTab==="search")+'">Hľadať</button></div>';
     if(sTab==="search")h+='<form class="sm-search" data-act="sFind"><input id="sQ" type="search" placeholder="meno, e-mail alebo slovo (napr. torta)" value="'+esc(sQ)+'" autocomplete="off"><button class="btn" type="submit">Hľadať</button></form>';
     var nSel=sSel?Object.keys(sSel).length:0;
-    if(sSel)h+='<div class="form sm-selbar"><b>Vybraté: '+nSel+'</b><button class="x" data-act="sSelAll">Vybrať všetky</button><button class="btn" data-act="sTrashSel"'+(nSel&&!sBusy?'':' disabled')+' style="margin-left:auto">'+(sBusy?'Mažem…':'🗑 Zmazať')+'</button><button class="x" data-act="sSelOff">Zrušiť</button></div>';
-    else h+='<div class="form" style="justify-content:flex-end;margin-top:6px"><button class="x" data-act="sSelOn">Vybrať a zmazať</button><button class="x" data-act="sReload">'+(sLoading?'Načítavam…':'Obnoviť')+'</button></div>';
+    if(sSel){
+      h+='<div class="sm-selbar"><div class="form" style="margin-top:0;align-items:center"><b>Vybraté: '+nSel+'</b><button class="x" data-act="sSelAll">Vybrať všetky</button><button class="x" data-act="sSelOff" style="margin-left:auto">Zrušiť</button></div>';
+      var dis=nSel&&!sBusy?'':' disabled';
+      h+='<div class="sm-acts"><button data-act="sBulk" data-op="read"'+dis+'>✉️ Prečítané</button><button data-act="sBulk" data-op="unread"'+dis+'>📩 Neprečítané</button><button data-act="sBulk" data-op="star"'+dis+'>★ Hviezdička</button>'+(sTab==="starred"?'<button data-act="sBulk" data-op="unstar"'+dis+'>☆ Bez hviezdičky</button>':'')+(sTab==="inbox"?'<button data-act="sBulk" data-op="archive"'+dis+'>📥 Archivovať</button>':'')+'<button data-act="sBulk" data-op="trash" class="del"'+dis+'>🗑 Zmazať</button></div></div>';
+    }
+    else h+='<div class="form" style="justify-content:flex-end;margin-top:6px"><button class="x" data-act="sSelOn">☑ Vybrať</button><button class="x" data-act="sReload">'+(sLoading?'Načítavam…':'Obnoviť')+'</button></div>';
     if(sErr)h+='<div class="card small" style="color:var(--berry)">'+esc(sErr)+'</div>';
     if(sTab==="search"&&!sQ){h+='<div class="empty">Napíš, čo hľadáš. Funguje aj vyhľadávanie ako v Gmaile, napr. <strong>from:novakova</strong> alebo <strong>torta december</strong>.</div>';return h}
     if(!L){h+='<div class="empty">'+(sLoading?'Načítavam e-maily…':'E-maily sa nepodarilo načítať.')+'</div>';return h}
@@ -1588,7 +1633,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       var who=sTab==="sent"?"Komu: "+(t.to||"").replace(/<[^>]*>/g,"").replace(/"/g,"").trim():sName(t.from);
       var isSel=sSel&&sSel[t.id];
       h+='<button class="sm-row'+(t.unread?' unread':'')+(sSel?' selmode':'')+(isSel?' sel':'')+'" data-act="'+(sSel?'sPick':'sOpen')+'" data-id="'+esc(t.id)+'"'+(sSel?' aria-pressed="'+!!isSel+'"':'')+'>'+(sSel?'<span class="sm-chk" aria-hidden="true">'+(isSel?'✓':'')+'</span>':'')+'<div class="sm-top"><b>'+esc(who)+(t.count>1?'<span class="sm-cnt">'+t.count+'</span>':'')+'</b><span>'+esc(sWhen(t.date))+'</span></div>';
-      h+='<div class="sm-sub">'+esc(t.subject||"(bez predmetu)")+'</div><div class="sm-snip">'+esc(t.snip||"")+'</div></button>';
+      h+='<div class="sm-sub">'+(t.star?'<span class="sm-star">★</span> ':'')+esc(t.subject||"(bez predmetu)")+'</div><div class="sm-snip">'+esc(t.snip||"")+'</div></button>';
     });
     if(L.more)h+='<div class="form" style="justify-content:center"><button class="x" data-act="sMore"'+(sLoading?' disabled':'')+'>'+(sLoading?'Načítavam…':'Načítať staršie')+'</button></div>';
     return h;
@@ -1616,7 +1661,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       h+='<div class="form"><button class="btn" data-act="sSend"'+(sBusy?' disabled':'')+'>'+(sBusy?'Odosielam…':'Odoslať')+'</button><button class="x" data-act="sReplyOff">Zrušiť</button></div></div>';
     }else{
       h+='<div class="form"><button class="btn" data-act="sReplyOn">Odpovedať</button><button class="btn" data-act="sCal" style="background:var(--pist);color:var(--tile-ink)">+ Do kalendára</button></div>';
-      h+='<div class="form"><button class="x" data-act="sTrash" style="color:var(--berry)">🗑 Zmazať</button><button class="x" data-act="sUnread">Označiť ako neprečítané</button><a class="x" href="'+esc(gm)+'" target="_blank" rel="noopener" style="text-decoration:none">Otvoriť v Gmaile ↗</a></div>';
+      h+='<div class="sm-acts" style="margin-top:12px"><button data-act="sOne" data-op="'+(T.star?'unstar':'star')+'">'+(T.star?'★ Odobrať hviezdičku':'☆ Pridať hviezdičku')+'</button>'+(T.inbox===false?'<button data-act="sOne" data-op="inbox">📤 Do Doručených</button>':'<button data-act="sOne" data-op="archive">📥 Archivovať</button>')+'<button data-act="sOne" data-op="unread">📩 Neprečítané</button><button data-act="sOne" data-op="trash" class="del">🗑 Zmazať</button></div><div class="form"><a class="x" href="'+esc(gm)+'" target="_blank" rel="noopener" style="text-decoration:none">Otvoriť v Gmaile ↗</a></div>';
     }
     return h;
   }
@@ -1694,19 +1739,10 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(a==="sSelOff"){sSel=null;renderS();return}
     if(a==="sPick"){var pid=t.dataset.id;if(sSel[pid])delete sSel[pid];else sSel[pid]=1;renderS();return}
     if(a==="sSelAll"){var LL=sList[sTab];if(LL)LL.threads.forEach(function(x){sSel[x.id]=1});renderS();return}
-    if(a==="sTrashSel"||a==="sTrash"){
-      var ids=a==="sTrash"?[sOpen]:Object.keys(sSel||{});
-      if(!ids.length)return;
-      if(!confirm(ids.length===1?"Zmazať tento e-mail? Presunie sa do Koša v Gmaile (obnoviť sa dá 30 dní).":"Zmazať "+ids.length+" e-mailov? Presunú sa do Koša v Gmaile (obnoviť sa dajú 30 dní)."))return;
-      sBusy=true;t.disabled=true;
-      kApi({action:"mail_trash",ids:ids},sApiCfg()).then(function(){
-        sBusy=false;
-        Object.keys(sList).forEach(function(k){if(sList[k]&&sList[k].threads)sList[k].threads=sList[k].threads.filter(function(x){return ids.indexOf(x.id)<0})});
-        try{["inbox","sent"].forEach(function(k){if(sList[k])localStorage.setItem("mt_cal_mail_"+k,JSON.stringify(sList[k]))})}catch(e){}
-        sSel=null;if(a==="sTrash"){sOpen=null;sThread=null}
-        toast(ids.length===1?"E-mail zmazaný":"Zmazané e-maily: "+ids.length);renderS();
-      }).catch(function(e){sBusy=false;t.disabled=false;toast(sErrMsg(e))});
-      return;
+    if(a==="sBulk"){sDo(Object.keys(sSel||{}),t.dataset.op,t);return}
+    if(a==="sOne"){
+      var op1=t.dataset.op,leave=op1==="trash"||op1==="unread"||(op1==="archive")||(op1==="unstar"&&sTab==="starred");
+      sDo([sOpen],op1,t,leave?function(){sOpen=null;sThread=null}:null);return;
     }
     if(a==="sBack"){sOpen=null;sThread=null;sReply=false;sErr="";renderS();return}
     if(a==="sReplyOn"){sReply=true;renderS();var x=document.getElementById("sTxt");x&&x.focus();return}
@@ -1721,14 +1757,6 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       kApi({action:"mail_reply",id:id,body:body,addr:SC.addr,name:SC.name},sApiCfg()).then(function(){
         sBusy=false;sReply=false;toast("Odpoveď odoslaná");delete sList.sent;sOpenThread(id);
       }).catch(function(e){sBusy=false;t.disabled=false;t.textContent="Odoslať";tx.readOnly=false;toast(e.message)});
-      return;
-    }
-    if(a==="sUnread"){
-      var id2=sOpen;t.disabled=true;
-      kApi({action:"mail_read",id:id2,read:false},sApiCfg()).then(function(){
-        Object.keys(sList).forEach(function(k){(sList[k].threads||[]).forEach(function(x){if(x.id===id2)x.unread=true})});
-        sOpen=null;sThread=null;renderS();toast("Označené ako neprečítané");
-      }).catch(function(e){t.disabled=false;toast(e.message)});
       return;
     }
     if(a==="sCal"){if(!sThread)return;kPre=sGuess(sThread);location.hash="#kalendar";setTimeout(kFocusForm,50);return}
