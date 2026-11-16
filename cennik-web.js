@@ -174,33 +174,3 @@ CENNIK_WEB.napoje = [
   ], flav: "", note: ""}
 ];
 
-// Koláče z papierového cenníka „Ceny a druhy koláčov“ (fotka od Petra, 16. 11. 2026), ktoré na webe nie sú.
-// Na papieri: kde nie je napísaný min. odber, platí 15 ks z jednej príchute.
-var PAP = "Z papierového cenníka (16. 11. 2026).";
-function pk(id, name, p, min) { return {id: id, name: name, desc: "", valid: "", vars: [ks(p, min === undefined ? 15 : min)], flav: "", note: PAP}; }
-CENNIK_WEB.kolaceNove = [
-  pk("p-veternik-pist", "Veterník pistácia", 3.5),
-  {id: "p-miniveternik", name: "Miniveterník", desc: "", valid: "", vars: [ks(2.6, 15, "Klasický"), ks(2.8, 15, "Pistácia")], flav: "", note: PAP},
-  pk("p-profit-pist", "Profiterolka pistácia", 2.7),
-  pk("p-laskonky-pist", "Laskonky pistácia", 2.5),
-  {id: "p-cheese-kus", name: "Cheesecake na kusy", desc: "", valid: "", vars: [ks(4.2, 0, "Kus"), {n: "Celý mix", d: "", p: 50.4}], flav: "", note: PAP + " Bez minimálneho odberu."},
-  {id: "p-torta-kus", name: "Torta na kusy", desc: "", valid: "", vars: [ks(4.9, 0, "Kus"), {n: "Celá torta", d: "", p: 58.8}], flav: "", note: PAP + " Bez minimálneho odberu."},
-  pk("p-cupcake", "Cupcake", 2.5),
-  pk("p-mrkvac", "Mrkváč", 2.5),
-  pk("p-jez", "Kokosový jež", 2.5),
-  pk("p-lotus-rez", "Orechovo lotusový rez", 2.7),
-  pk("p-redvelvet", "Red velvet", 2.8),
-  pk("p-misa-pist", "Pistáciový míša rez", 3),
-  pk("p-choux", "Choux", 3),
-  pk("p-lici", "Malina liči rez", 3.3),
-  pk("p-deluxe-coko", "Deluxe čokoládový rez", 3.5),
-  pk("p-deluxe-malina", "Deluxe malinový rez", 3.5),
-  pk("p-trio", "Trio čoko kocka", 3.5),
-  pk("p-parisbrest", "Paris brest", 3.5),
-  pk("p-eclair", "Eclair", 3.5),
-  pk("p-brownie-kokos", "Brownie kokos", 3.5),
-  pk("p-slimak", "Škoricový slimák", 3.5),
-  pk("p-tiramisu-rez", "Tiramisu rez", 3.5),
-  {id: "p-makovy", name: "Makový rez s višňami", desc: "Bezlepkový", valid: "", vars: [ks(3.5, 15)], flav: "", note: PAP}
-];
-CENNIK_WEB.kolace = CENNIK_WEB.kolace.concat(CENNIK_WEB.kolaceNove);

@@ -679,13 +679,14 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(cnUn||!cfgOk)return;
     cnUn=onSnapshot(cnRef,function(snap){
       if(!snap.exists()){
-        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser({src:CENNIK_WEB.src,torty:CENNIK_WEB.torty,kolace:CENNIK_WEB.kolace,napoje:CENNIK_WEB.napoje,napSeed:1,kolAdd:1}))).catch(fail)}
+        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser({src:CENNIK_WEB.src,torty:CENNIK_WEB.torty,kolace:CENNIK_WEB.kolace,napoje:CENNIK_WEB.napoje,napSeed:1,kolDel:1}))).catch(fail)}
         return;
       }
       var d=snap.data();
-      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[],napSeed:d.napSeed||0,kolAdd:d.kolAdd||0};
+      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[],napSeed:d.napSeed||0,kolDel:d.kolDel||0};
       if(!CN.napSeed&&!CN.napoje.length){CN.napoje=JSON.parse(JSON.stringify(CENNIK_WEB.napoje));CN.napSeed=1;cnSave()}
-      if(!CN.kolAdd){var have={};CN.kolace.forEach(function(x){have[x.id]=1});CENNIK_WEB.kolaceNove.forEach(function(x){if(!have[x.id])CN.kolace.push(JSON.parse(JSON.stringify(x)))});CN.kolAdd=1;cnSave()}
+      // papierový cenník (16. 11. 2026) je neplatný: jeho koláče (id p-…) sa raz odstránia
+      if(!CN.kolDel){var P=['p-veternik-pist','p-miniveternik','p-profit-pist','p-laskonky-pist','p-cheese-kus','p-torta-kus','p-cupcake','p-mrkvac','p-jez','p-lotus-rez','p-redvelvet','p-misa-pist','p-choux','p-lici','p-deluxe-coko','p-deluxe-malina','p-trio','p-parisbrest','p-eclair','p-brownie-kokos','p-slimak','p-tiramisu-rez','p-makovy'];CN.kolace=CN.kolace.filter(function(x){return P.indexOf(x.id)<0});CN.kolDel=1;cnSave()}
       cnGot=true;cnRefresh();
     },fail);
   }
