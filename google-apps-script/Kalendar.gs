@@ -22,6 +22,10 @@
  * → ceruzka (Upraviť) → Verzia: Nová verzia → Nasadiť. URL zostane rovnaká.
  * Ak nová verzia potrebuje nové povolenie (napr. Gmail), najprv hore vyber
  * funkciu „nastav“ → Spustiť → povoľ prístup. Kľúč sa tým nezmení.
+ *
+ * Fotky pri udalostiach: vľavo „Služby“ (Services) → + → „Google Calendar API“
+ * → Pridať (identifikátor musí zostať „Calendar“). Fotky sa ukladajú na Disk
+ * firemného účtu do priečinka „Macka. fotky“.
  */
 
 // Prázdne = hlavný kalendár firemného účtu. Iný kalendár: vlož jeho ID
@@ -38,6 +42,8 @@ function nastav() {
   var c = cal_();
   Logger.log('Kalendár: ' + c.getName() + ' (' + c.getTimeZone() + ')');
   Logger.log('Gmail: ' + GmailApp.getInboxUnreadCount() + ' neprečítaných v Doručených');
+  Logger.log('Disk: priečinok ' + folder_().getName());
+  Logger.log('Fotky v kalendári: ' + (calApi_() ? 'služba Google Calendar API je pridaná' : 'CHÝBA služba Google Calendar API (Služby → + → Google Calendar API)'));
   Logger.log('KĽÚČ pre appku: ' + t);
 }
 
@@ -91,7 +97,10 @@ function handle_(p) {
           rec: x.isRecurringEvent()
         };
       });
-      return out_({ ok: true, name: c.getName(), events: ev });
+      var am = null;
+      try { am = atts_(c.getId(), from, to); } catch (x) { am = null; }
+      if (am) ev.forEach(function (e) { e.att = am[e.id] || []; });
+      return out_({ ok: true, name: c.getName(), events: ev, photos: !!am });
     }
 
     if (p.action === 'add') {
@@ -139,6 +148,10 @@ function handle_(p) {
       ev2.deleteEvent();
       return out_({ ok: true });
     }
+
+    if (p.action === 'photo') return out_(photo_(p));
+    if (p.action === 'upload') return out_(upload_(c, p));
+    if (p.action === 'unattach') return out_(unattach_(c, p));
 
     if (p.action === 'mail_list') return out_(mailList_(p, tz));
     if (p.action === 'mail_get') return out_(mailGet_(p, tz));
@@ -236,4 +249,80 @@ function mailReply_(p) {
   }
   target.reply(body, opt);
   return { ok: true, from: opt.from || me };
+}
+
+/* ---- Fotky pri udalostiach (prílohy z Disku) ---- */
+
+function calApi_() { return typeof Calendar !== 'undefined'; }
+
+function folder_() {
+  var it = DriveApp.getFoldersByName('Macka. fotky');
+  return it.hasNext() ? it.next() : DriveApp.createFolder('Macka. fotky');
+}
+
+// Prílohy udalostí v danom období: { iCalUID: [ {fileId, title, mime, url} ] }
+function atts_(calId, from, to) {
+  if (!calApi_()) return null;
+  var map = {}, page;
+  do {
+    var r = Calendar.Events.list(calId, {
+      timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: true,
+      maxResults: 2500, pageToken: page,
+      fields: 'nextPageToken,items(iCalUID,attachments(fileId,title,mimeType,fileUrl))'
+    });
+    (r.items || []).forEach(function (it) {
+      if (it.attachments && it.attachments.length) {
+        map[it.iCalUID] = it.attachments.map(function (a) {
+          return { fileId: a.fileId || '', title: a.title || '', mime: a.mimeType || '', url: a.fileUrl || '' };
+        });
+      }
+    });
+    page = r.nextPageToken;
+  } while (page);
+  return map;
+}
+
+function restEvent_(calId, uid) {
+  var r = Calendar.Events.list(calId, { iCalUID: uid, fields: 'items(id,recurringEventId,attachments)' });
+  return (r.items || [])[0] || null;
+}
+
+// Fotka ako base64: náhľad (malý) alebo celá
+function photo_(p) {
+  if (!p.fileId) return { ok: false, error: 'chyba subor' };
+  var f = DriveApp.getFileById(p.fileId), b = null;
+  if (!p.full) { try { b = f.getThumbnail(); } catch (x) { b = null; } }
+  if (!b) {
+    if (!p.full && String(f.getMimeType()).indexOf('image/') !== 0) return { ok: false, error: 'bez nahladu' };
+    if (f.getSize() > 15 * 1024 * 1024) return { ok: false, error: 'subor je prilis velky' };
+    b = f.getBlob();
+  }
+  return { ok: true, mime: b.getContentType() || 'image/jpeg', data: Utilities.base64Encode(b.getBytes()), name: f.getName() };
+}
+
+function attCopy_(a) { return { fileUrl: a.fileUrl, title: a.title, mimeType: a.mimeType, fileId: a.fileId }; }
+
+// Nahratie fotky na Disk a pripojenie k udalosti
+function upload_(c, p) {
+  if (!calApi_()) return { ok: false, error: 'sluzba' };
+  if (!p.id || !p.data) return { ok: false, error: 'chyba udalost alebo subor' };
+  var ev = restEvent_(c.getId(), p.id);
+  if (!ev) return { ok: false, error: 'udalost sa nenasla' };
+  var att = (ev.attachments || []).map(attCopy_);
+  if (att.length >= 25) return { ok: false, error: 'udalost uz ma 25 priloh' };
+  var blob = Utilities.newBlob(Utilities.base64Decode(p.data), p.mime || 'image/jpeg', p.name || 'foto.jpg');
+  var f = folder_().createFile(blob);
+  att.push({ fileUrl: 'https://drive.google.com/open?id=' + f.getId(), title: f.getName(), mimeType: f.getMimeType(), fileId: f.getId() });
+  Calendar.Events.patch({ attachments: att }, c.getId(), ev.id, { supportsAttachments: true });
+  return { ok: true, fileId: f.getId() };
+}
+
+// Odobratie fotky z udalosti (súbor zostane na Disku)
+function unattach_(c, p) {
+  if (!calApi_()) return { ok: false, error: 'sluzba' };
+  var ev = restEvent_(c.getId(), p.id);
+  if (!ev) return { ok: false, error: 'udalost sa nenasla' };
+  var att = (ev.attachments || []).filter(function (a) { return a.fileId !== p.fileId; }).map(attCopy_);
+  Calendar.Events.patch({ attachments: att }, c.getId(), ev.id, { supportsAttachments: true });
+  return { ok: true };
 }

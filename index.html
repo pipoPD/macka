@@ -158,6 +158,23 @@ tfoot td{font-weight:700;border-bottom:0}
 .kg-now{position:absolute;left:0;right:0;height:2px;background:#D50000;z-index:2;pointer-events:none}
 .kg-now::before{content:"";position:absolute;left:-4px;top:-4px;width:10px;height:10px;border-radius:50%;background:#D50000}
 @media (min-width:560px){.kgrid{margin:10px 0 0}.kg-row{grid-template-columns:44px repeat(7,minmax(0,1fr))}.kg-ev{font-size:.75rem;padding:3px 5px}.kg-ad{font-size:.78rem}}
+.kphwrap{margin-top:12px}
+.kphh{font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:4px}
+.kphs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.kph{position:relative;width:76px;height:76px;border-radius:12px;overflow:hidden;background:var(--line);flex:none}
+.kpho{display:block;width:100%;height:100%;padding:0;border:0;background:transparent;cursor:pointer;color:var(--muted);font:inherit;font-size:.68rem;overflow:hidden}
+.kph img{width:100%;height:100%;object-fit:cover;display:block}
+.kph img:not([src]){display:none}
+.kpho span{display:block;padding:4px;overflow-wrap:anywhere}
+.kphx{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;line-height:24px;padding:0;font-size:1rem}
+.kphadd{width:76px;height:76px;border:2px dashed var(--line);border-radius:12px;background:transparent;color:var(--berry);font:inherit;font-size:.78rem;font-weight:700;cursor:pointer;line-height:1.2}
+.kphup{display:flex;align-items:center;justify-content:center;text-align:center;font-size:.72rem;font-weight:700;color:var(--muted)}
+.kph.kphno .kpho::after{content:"📷";font-size:1.4rem}
+#klight{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(48px + env(safe-area-inset-top,0px)) 10px calc(40px + env(safe-area-inset-bottom,0px))}
+#klight img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;min-height:0;flex:1 1 auto}
+#klight .klx{position:absolute;top:calc(8px + env(safe-area-inset-top,0px));right:10px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:1.6rem;cursor:pointer}
+#klight .kll{color:#eee;font-size:.85rem;margin-top:8px;text-align:center}
+#klight .kll a{color:#fff}
 .kmodal{position:fixed;inset:0;z-index:40;background:rgba(43,27,36,.45);display:flex;align-items:flex-end;justify-content:center;padding:12px;overflow-y:auto}
 .kmcard{width:100%;max-width:520px;margin:auto 0 0;max-height:calc(100vh - 24px);overflow-y:auto}
 @media (min-width:560px){.kmodal{align-items:center}.kmcard{margin:auto}}
@@ -1070,6 +1087,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   // URL skriptu a kľúč sú len vo Firebase (apps/nastavenia → cal), nie v kóde.
   var KC={url:"",token:""},kGot=false,kUnsub=null,kRef=cfgOk?doc(db,"apps","nastavenia"):null;
   var kData={},kLoading={},kErr="",kName="",kSetup=false,kForm=null,kBusy=false,kCode="",kPre=null;
+  var kTh={},kThLoad={},kPhotosOk=null;
   var kView=(function(){try{return localStorage.getItem("mt_cal_view")==="list"?"list":"grid"}catch(e){return "grid"}})();
   var kBody=document.getElementById("k-body");
   var SC={addr:"",name:""},sList={},sTab="inbox",sQ="",sOpen=null,sThread=null,sErr="",sLoading=false,sReply=false,sBusy=false;
@@ -1119,7 +1137,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       .then(function(d){
         if(d&&d.ok)return d;
         var er=d&&d.error;
-        throw new Error(er==="kluc"?"Nesprávny kľúč.":er==="neznama akcia"?"Skript v Google účte je starý. Vlož doň nový kód a nasaď novú verziu (postup je v Nastavení prepojenia).":"Chyba skriptu: "+(er||"neznáma"));
+        throw new Error(er==="kluc"?"Nesprávny kľúč.":er==="sluzba"?"Na fotky treba v Apps Scripte pridať službu Google Calendar API (Služby → + → Google Calendar API → Pridať) a nasadiť novú verziu.":er==="neznama akcia"?"Skript v Google účte je starý. Vlož doň nový kód a nasaď novú verziu (postup je v Nastavení prepojenia).":"Chyba skriptu: "+(er||"neznáma"));
       });
   }
   function kCacheGet(ws){try{var v=localStorage.getItem("mt_cal_"+ws);return v?JSON.parse(v):null}catch(e){return null}}
@@ -1127,11 +1145,11 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(!kOn()||kLoading[ws])return;
     kLoading[ws]=true;
     kApi({action:"list",from:ws,to:kAddDays(ws,7)}).then(function(d){
-      kData[ws]=d.events||[];kName=d.name||kName;kErr="";
+      kData[ws]=d.events||[];kName=d.name||kName;kErr="";kPhotosOk=!!d.photos;
       try{localStorage.setItem("mt_cal_"+ws,JSON.stringify(kData[ws]))}catch(e){}
     }).catch(function(e){kErr=e.message}).then(function(){
       delete kLoading[ws];
-      if(location.hash==="#kalendar"&&!kInField()&&!kForm)renderK();
+      if(location.hash==="#kalendar"&&!kInField())renderK();
     });
   }
   function kEvents(){return kData[kWeek]||kCacheGet(kWeek)}
@@ -1163,6 +1181,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(!e.allDay){from=e.start.slice(11,16);if(e.end&&e.end.slice(0,10)===date)to=e.end.slice(11,16)}
       multi=(e.allDay&&e.end&&kAddDays(e.start,1)<e.end)||(!e.allDay&&e.end&&e.end.slice(0,10)!==date);
     }
+    if(f.vals){title=f.vals.t;date=f.vals.d;from=f.vals.f;to=f.vals.e;loc=f.vals.l;desc=f.vals.n}
     var h='<div class="kmodal"><div class="card kmcard" id="kFormCard" role="dialog" aria-modal="true" aria-label="'+(edit?'Upraviť udalosť':'Nová udalosť')+'"><h3>'+(edit?'Upraviť udalosť':'Nová udalosť')+'</h3><div class="vgrid">';
     h+='<label class="full">Názov<input id="kaT" type="text" value="'+esc(title)+'" placeholder="napr. Odber torty – Nováková"></label>';
     h+='<label>Dátum<input id="kaD" type="date" value="'+esc(date)+'"></label>';
@@ -1170,9 +1189,83 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     h+='<label>Do<input id="kaE" type="time" value="'+esc(to)+'"></label>';
     h+='<label class="full">Miesto<input id="kaL" type="text" value="'+esc(loc)+'"></label>';
     h+='<label class="full">Poznámka<textarea id="kaN">'+esc(desc)+'</textarea></label></div>';
+    h+=kPhotosView(f,e);
     h+='<div class="small" style="margin-top:6px">Bez času sa udalosť uloží na celý deň.'+(multi?' Udalosť trvá viac dní: ak zmeníš dátum alebo čas, bude len na jeden deň.':'')+'</div>';
     h+='<div class="form"><button class="btn" data-act="kFormSave"'+(kBusy?' disabled':'')+'>'+(kBusy?'Ukladám…':'Uložiť')+'</button><button class="x" data-act="kFormCancel">Zrušiť</button>'+(edit?'<button class="x" data-act="kDel" data-id="'+esc(e.id)+'" data-t="'+esc(e.title||"")+'" style="margin-left:auto;color:var(--berry)">Zmazať</button>':'')+'</div></div></div>';
     return h;
+  }
+  // Fotky v okne udalosti
+  function kIsImg(a){return !a.mime||a.mime.indexOf("image/")===0}
+  function kPhotosView(f,e){
+    var atts=e?(e.att||[]):[],pend=f.pending||[];
+    var h='<div class="kphwrap"><div class="kphh">Fotky</div>';
+    if(e&&kPhotosOk===false)h+='<div class="small">Na fotky treba v Apps Scripte pridať službu <strong>Google Calendar API</strong> (postup v Nastavení prepojenia).</div>';
+    h+='<div class="kphs">';
+    atts.forEach(function(a){
+      var img=kIsImg(a);
+      h+='<div class="kph"><button type="button" class="kpho" data-act="kPhOpen" data-f="'+esc(a.fileId)+'" data-m="'+esc(a.mime)+'" data-u="'+esc(a.url)+'" data-n="'+esc(a.title)+'" aria-label="Otvoriť '+esc(a.title||"fotku")+'">';
+      if(a.fileId)h+='<img data-th="'+esc(a.fileId)+'" alt=""'+(kTh[a.fileId]?' src="'+kTh[a.fileId]+'"':'')+'>';
+      if(!img||!a.fileId)h+='<span>'+esc(a.title||"príloha")+'</span>';
+      h+='</button>'+(a.fileId?'<button type="button" class="kphx" data-act="kPhDel" data-f="'+esc(a.fileId)+'" aria-label="Odobrať fotku">×</button>':'')+'</div>';
+    });
+    pend.forEach(function(p,i){h+='<div class="kph"><img src="'+p.url+'" alt=""><button type="button" class="kphx" data-act="kPhRm" data-i="'+i+'" aria-label="Odobrať">×</button></div>'});
+    if(f.up)h+='<div class="kph kphup">Nahrávam<br>'+esc(f.up)+'</div>';
+    else h+='<button type="button" class="kphadd" data-act="kPhAdd">+ Pridať<br>fotky</button>';
+    h+='</div><input type="file" id="kaP" accept="image/*" multiple hidden>';
+    if(pend.length)h+='<div class="small">Fotky sa nahrajú po uložení udalosti.</div>';
+    h+='</div>';
+    return h;
+  }
+  function kLoadThumbs(){
+    document.querySelectorAll("#k-body img[data-th]:not([src])").forEach(function(im){
+      var id=im.dataset.th;if(kThLoad[id])return;kThLoad[id]=1;
+      kApi({action:"photo",fileId:id}).then(function(d){
+        kTh[id]="data:"+d.mime+";base64,"+d.data;
+        document.querySelectorAll('#k-body img[data-th="'+id+'"]').forEach(function(x){x.src=kTh[id]});
+      }).catch(function(){delete kThLoad[id];im.closest(".kph")&&im.closest(".kph").classList.add("kphno")});
+    });
+  }
+  // Zmenšenie fotky pred nahratím (max 1600 px, JPEG)
+  function kResize(file){
+    return new Promise(function(res){
+      var u=URL.createObjectURL(file),im=new Image();
+      im.onload=function(){
+        var w=im.naturalWidth,h=im.naturalHeight,sc=Math.min(1,1600/Math.max(w,h)),c=document.createElement("canvas");
+        c.width=Math.round(w*sc);c.height=Math.round(h*sc);c.getContext("2d").drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);
+        res({name:(file.name||"foto").replace(/\.[^.]+$/,"")+".jpg",mime:"image/jpeg",data:c.toDataURL("image/jpeg",0.85).split(",")[1]});
+      };
+      im.onerror=function(){
+        URL.revokeObjectURL(u);var r=new FileReader();
+        r.onload=function(){res({name:file.name||"foto",mime:file.type||"application/octet-stream",data:String(r.result).split(",")[1]})};
+        r.readAsDataURL(file);
+      };
+      im.src=u;
+    });
+  }
+  function kUpload(id,files){
+    var i=0,ok=0;
+    function next(){
+      if(i>=files.length)return Promise.resolve(ok);
+      var f=files[i++];
+      if(kForm&&kForm.id===id){kForm.up=i+"/"+files.length;if(!kInField())renderK()}else toast("Nahrávam fotku "+i+"/"+files.length+"…");
+      return kResize(f).then(function(x){return kApi({action:"upload",id:id,name:x.name,mime:x.mime,data:x.data})}).then(function(){ok++;return next()});
+    }
+    return next().then(function(n){return n},function(er){toast(er.message);return ok}).then(function(n){
+      if(kForm&&kForm.id===id)kForm.up=null;
+      if(n)toast(n===1?"Fotka pridaná":"Pridané fotky: "+n);
+      kLoad(kWeek);return n;
+    });
+  }
+  function kLightbox(a){
+    var el=document.getElementById("klight");
+    if(!el){el=document.createElement("div");el.id="klight";el.setAttribute("role","dialog");el.setAttribute("aria-modal","true");document.body.appendChild(el);
+      el.addEventListener("click",function(ev){if(ev.target.closest("a"))return;el.hidden=true;el.innerHTML=""});}
+    el.hidden=false;
+    el.innerHTML='<button class="klx" aria-label="Zavrieť">×</button>'+(kTh[a.f]?'<img src="'+kTh[a.f]+'" alt="">':'')+'<div class="kll">Načítavam…</div>';
+    kApi({action:"photo",fileId:a.f,full:true}).then(function(d){
+      if(el.hidden)return;
+      el.innerHTML='<button class="klx" aria-label="Zavrieť">×</button><img src="data:'+d.mime+';base64,'+d.data+'" alt="'+esc(d.name||"")+'"><div class="kll">'+esc(d.name||"")+(a.u?' · <a href="'+esc(a.u)+'" target="_blank" rel="noopener">otvoriť na Disku</a>':'')+'</div>';
+    }).catch(function(er){var l=el.querySelector(".kll");if(l)l.textContent=er.message});
   }
   function kTime(e){return e.allDay?'celý deň':e.start.slice(11,16)+(e.end&&e.end.slice(0,10)===e.start.slice(0,10)?'–'+e.end.slice(11,16):'')}
   function kEvAttr(e){return e.rec?'':' data-act="kOpen" data-id="'+esc(e.id)+'" data-s="'+esc(e.start)+'" role="button" tabindex="0"'}
@@ -1185,6 +1278,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(info)h+='<div class="small">'+esc(info)+'</div>';
     if(e.loc)h+='<div class="small">📍 '+esc(e.loc)+'</div>';
     var ds=kDesc(e.desc);if(ds)h+='<div class="small">'+esc(ds)+'</div>';
+    if(e.att&&e.att.length)h+='<div class="small">📷 '+e.att.length+(e.att.length===1?' fotka':e.att.length<5?' fotky':' fotiek')+'</div>';
     if(e.rec)h+='<div class="small">opakovaná udalosť (upravíš v Google Kalendári)</div>';
     h+='</div>'+(e.rec?'':'<span class="kpen" aria-hidden="true">✎</span>')+'</div>';
     return h;
@@ -1250,7 +1344,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       h+='<div class="kg-row kg-all" style="grid-template-rows:repeat('+lanes.length+',auto)"><div class="kg-gut" style="grid-row:1/span '+lanes.length+'"></div>';
       sp.allDay.forEach(function(x){
         var col=KCOL[x.e.color]||"";
-        h+='<div class="kg-ad'+(x.e.rec?'':' kedit')+'" style="grid-column:'+(x.a+2)+'/'+(x.b+3)+';grid-row:'+(x.l+1)+(col?';--kc:'+col:'')+'"'+kEvAttr(x.e)+' title="'+esc(x.e.title||"")+'">'+esc(x.e.title||"(bez názvu)")+'</div>';
+        h+='<div class="kg-ad'+(x.e.rec?'':' kedit')+'" style="grid-column:'+(x.a+2)+'/'+(x.b+3)+';grid-row:'+(x.l+1)+(col?';--kc:'+col:'')+'"'+kEvAttr(x.e)+' title="'+esc(x.e.title||"")+'">'+(x.e.att&&x.e.att.length?'📷 ':'')+esc(x.e.title||"(bez názvu)")+'</div>';
       });
       h+='</div>';
     }
@@ -1274,7 +1368,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
         gr.forEach(function(x){
           var top=(x.from-h0*60)/60*KHH,ht=Math.max(18,(x.to-x.from)/60*KHH-2),col=KCOL[x.e.color]||"";
           h+='<div class="kg-ev'+(x.e.rec?'':' kedit')+'" style="top:'+top+'px;height:'+ht+'px;left:'+(n>1?Math.min(x.c*40,60):0)+'%;width:calc('+(n>1?100-Math.min(x.c*40,60):100)+'% - 2px);z-index:'+(1+x.c)+(col?';--kc:'+col:'')+'"'+kEvAttr(x.e)+' title="'+esc(kTime(x.e)+' '+(x.e.title||""))+'">';
-          h+='<b>'+esc(x.e.title||"(bez názvu)")+'</b>'+(ht>30?'<span>'+esc(x.e.start.slice(11,16))+'</span>':'')+'</div>';
+          h+='<b>'+(x.e.att&&x.e.att.length?'📷 ':'')+esc(x.e.title||"(bez názvu)")+'</b>'+(ht>30?'<span>'+esc(x.e.start.slice(11,16))+'</span>':'')+'</div>';
         });
       });
       if(d===today){var nw=new Date(),nm=nw.getHours()*60+nw.getMinutes();if(nm>=h0*60&&nm<=h1*60)h+='<div class="kg-now" style="top:'+((nm-h0*60)/60*KHH)+'px"></div>'}
@@ -1298,21 +1392,29 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     h+='<details class="card" style="margin-top:22px"><summary>Nastavenie prepojenia</summary><div class="small" style="margin-top:8px">'+(kName?'Prepojený kalendár: <strong>'+esc(kName)+'</strong>':'Kalendár je prepojený.')+'</div>';
     h+='<div class="small" style="margin-top:8px">Keď sa zmení kód skriptu: v Apps Script vlož nový kód (tlačidlo nižšie) a ulož, potom <strong>Nasadiť → Spravovať nasadenia</strong> → ceruzka → Verzia: <strong>Nová verzia</strong> → Nasadiť. URL aj kľúč zostanú rovnaké.</div>';
     h+='<div class="form"><button class="x" data-act="kCopy">Kopírovať kód skriptu</button><button class="x" data-act="kEdit">Zmeniť URL alebo kľúč</button><button class="x" data-act="kOff">Odpojiť</button></div></details>';
-    if(kForm)h+=kFormView();
+    if(kForm){
+      var vt=document.getElementById("kaT");
+      if(vt)kForm.vals={t:vt.value,d:document.getElementById("kaD").value,f:document.getElementById("kaF").value,e:document.getElementById("kaE").value,l:document.getElementById("kaL").value,n:document.getElementById("kaN").value};
+      h+=kFormView();
+    }
+    var sy=kForm&&document.getElementById("kFormCard")?document.getElementById("kFormCard").scrollTop:0;
     kBody.innerHTML=h;
+    if(sy)document.getElementById("kFormCard").scrollTop=sy;
     document.body.style.overflow=kForm?"hidden":"";
+    if(kForm)kLoadThumbs();
   }
+  function kCloseForm(){if(kForm&&kForm.pending)kForm.pending.forEach(function(p){URL.revokeObjectURL(p.url)});kForm=null}
   function kFocusForm(){var i=document.getElementById("kaT");if(i&&!i.value)i.focus()}
   function kOpenEv(el){
     if(kBusy)return;
     kForm={id:el.dataset.id,start:el.dataset.s};renderK();
   }
   kBody.addEventListener("keydown",function(ev){
-    if(ev.key==="Escape"&&kForm&&!kBusy){kForm=null;renderK();return}
+    if(ev.key==="Escape"&&kForm&&!kBusy&&!kForm.up){kCloseForm();renderK();return}
     if((ev.key==="Enter"||ev.key===" ")&&ev.target.classList&&ev.target.classList.contains("kedit")){ev.preventDefault();kOpenEv(ev.target)}
   });
   kBody.addEventListener("click",function(ev){
-    if(ev.target.classList.contains("kmodal")){if(!kBusy){kForm=null;renderK()}return}
+    if(ev.target.classList.contains("kmodal")){if(!kBusy&&!kForm.up){kCloseForm();renderK()}return}
     var t=ev.target.closest("button,.kedit");
     if(!t){
       var col=ev.target.closest(".kg-col");
@@ -1334,7 +1436,19 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       var t0=kToday(),def=a==="kAddDay"?t.dataset.d:(kMonday(t0)===kWeek?t0:kWeek);
       kForm={date:def};renderK();kFocusForm();return;
     }
-    if(a==="kFormCancel"){kForm=null;renderK();return}
+    if(a==="kFormCancel"){kCloseForm();renderK();return}
+    if(a==="kPhAdd"){var pi=document.getElementById("kaP");if(pi)pi.click();return}
+    if(a==="kPhRm"){var pr=kForm.pending.splice(+t.dataset.i,1)[0];if(pr)URL.revokeObjectURL(pr.url);renderK();return}
+    if(a==="kPhOpen"){
+      if(!t.dataset.f||!kIsImg({mime:t.dataset.m})){if(t.dataset.u)window.open(t.dataset.u,"_blank","noopener");return}
+      kLightbox({f:t.dataset.f,u:t.dataset.u});return;
+    }
+    if(a==="kPhDel"){
+      if(!confirm("Odobrať fotku z udalosti? (Na Disku firmy zostane.)"))return;
+      t.disabled=true;
+      kApi({action:"unattach",id:kForm.id,fileId:t.dataset.f}).then(function(){toast("Fotka odobratá");kLoad(kWeek)}).catch(function(er){t.disabled=false;toast(er.message)});
+      return;
+    }
     if(a==="kEdit"){kSetup=true;kErr="";renderK();return}
     if(a==="kCancel"){kSetup=false;kErr="";renderK();return}
     if(a==="kOff"){
@@ -1370,20 +1484,31 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
         var oFrom=e.allDay?"":e.start.slice(11,16),oTo=(!e.allDay&&e.end&&e.end.slice(0,10)===e.start.slice(0,10))?e.end.slice(11,16):"";
         if(dt!==e.start.slice(0,10)||fr!==oFrom||to!==oTo){body.date=dt;body.from=fr;body.to=to;body.allDay=!fr}
       }else{body.action="add";body.date=dt;body.from=fr;body.to=to;body.allDay=!fr}
+      if(kForm.up){toast("Počkaj, kým sa nahrajú fotky");return}
+      var pend=(kForm.pending||[]).map(function(p){return p.file});
       kBusy=true;t.disabled=true;t.textContent="Ukladám…";
-      kApi(body).then(function(){
-        kBusy=false;kForm=null;kWeek=kMonday(dt);toast(e?"Udalosť upravená":"Uložené do Google Kalendára");renderK(true);
+      kApi(body).then(function(d){
+        kBusy=false;kCloseForm();kWeek=kMonday(dt);toast(e?"Udalosť upravená":"Uložené do Google Kalendára");renderK(true);
+        if(pend.length&&d.id)kUpload(d.id,pend);
       }).catch(function(er){kBusy=false;t.disabled=false;t.textContent="Uložiť";toast(er.message)});
       return;
     }
     if(a==="kDel"){
       if(!confirm("Zmazať udalosť „"+t.dataset.t+"“ z Google Kalendára?"))return;
       t.disabled=true;
-      kApi({action:"del",id:t.dataset.id}).then(function(){kForm=null;toast("Udalosť zmazaná");renderK(true)}).catch(function(e){t.disabled=false;toast(e.message)});
+      kApi({action:"del",id:t.dataset.id}).then(function(){kCloseForm();toast("Udalosť zmazaná");renderK(true)}).catch(function(e){t.disabled=false;toast(e.message)});
       return;
     }
   });
   kBody.addEventListener("focusout",function(){setTimeout(function(){if(!kInField()&&location.hash==="#kalendar"&&!kForm&&!kSetup)renderK()},300)});
+  kBody.addEventListener("change",function(ev){
+    if(ev.target.id!=="kaP"||!kForm)return;
+    var files=[].slice.call(ev.target.files||[]);ev.target.value="";
+    if(!files.length)return;
+    var e=kForm.id?kFind(kForm.id,kForm.start):null;
+    if(e){if(kPhotosOk===false){toast("Najprv treba v Apps Scripte pridať službu Google Calendar API.");return}kUpload(e.id,files)}
+    else{kForm.pending=(kForm.pending||[]).concat(files.map(function(f){return {file:f,url:URL.createObjectURL(f)}}));renderK()}
+  });
 
   /* ---- Správy: Gmail firmy cez ten istý Apps Script ako Kalendár ---- */
   // Adresa firmy (Reply-To) a meno odosielateľa sú len vo Firebase (apps/nastavenia → mail).
