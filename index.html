@@ -18,14 +18,14 @@
 :root{
   --bg:#FFF8F4; --surface:#FFFFFF; --ink:#2B1B24; --muted:#7C6670; --line:#F1E0E6;
   --berry:#B3245F; --berry-ink:#FFFFFF; --shadow:0 6px 20px rgba(122,31,75,.10);
-  --rose:#FBDDE8; --pist:#E1EFCB; --apri:#FDE3C4; --blue:#DCE4FA; --lav:#E8DDF7; --mint:#D3EFE6; --sand:#F3E6D2;
+  --rose:#FBDDE8; --pist:#E1EFCB; --apri:#FDE3C4; --blue:#DCE4FA; --lav:#E8DDF7; --mint:#D3EFE6; --sand:#F3E6D2; --xmas:#F8D7D3;
   --tile-ink:#3A1630; --ic:rgba(255,255,255,.72);
 }
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#1B1117; --surface:#2A1B24; --ink:#F8EAF0; --muted:#BFA7B3; --line:#3E2A35;
     --berry:#F08DB5; --berry-ink:#2B0F1D; --shadow:0 6px 20px rgba(0,0,0,.35);
-    --rose:#4A2438; --pist:#2F4026; --apri:#4D3A22; --blue:#2A3250; --lav:#3A2A50; --mint:#21413A; --sand:#463A2A;
+    --rose:#4A2438; --pist:#2F4026; --apri:#4D3A22; --blue:#2A3250; --lav:#3A2A50; --mint:#21413A; --sand:#463A2A; --xmas:#4E2427;
     --tile-ink:#F8EAF0; --ic:rgba(255,255,255,.12);
   }
 }
@@ -62,6 +62,7 @@ h2{font-size:1.7rem;margin-bottom:4px}
 .t-cennik{background:var(--lav)}
 .t-vyplaty{background:var(--mint)}
 .t-naklady{background:var(--sand)}
+.t-vianoce{background:var(--xmas)}
 .grid .tile:last-child:nth-child(odd){grid-column:1/-1;min-height:120px;flex-direction:row;align-items:center;justify-content:flex-start}
 .r-cennik{background:var(--lav)}
 .r-naklady{background:var(--sand)}
@@ -218,6 +219,10 @@ details.card summary{cursor:pointer;font-weight:700}
   <main id="home">
     <header class="hero"><svg class="logo" aria-hidden="true"><use href="#logo"/></svg><div><h1>Macka.</h1></div></header>
     <nav class="grid" aria-label="Hlavné menu">
+      <a class="tile t-vianoce" href="#vianoce-2026">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-1.5-3-5-4-5-1.5S10 8 12 8zM12 8c1.5-3 5-4 5-1.5S14 8 12 8z"/></svg>
+        <div><span>Vianoce 2026</span><small>Krabičky a objednávky</small></div>
+      </a>
       <a class="tile t-recepty" href="#recepty">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M9 8h6M9 12h6"/></svg>
         <div><span>Recepty</span><small>Koláče a postupy</small></div>
@@ -232,7 +237,7 @@ details.card summary{cursor:pointer;font-weight:700}
       </a>
       <a class="tile t-normy" href="#normy">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 21h12"/><path d="M5 7h14"/><path d="m5 7-3 7a3.5 3.5 0 0 0 6 0zM19 7l-3 7a3.5 3.5 0 0 0 6 0z"/></svg>
-        <div><span>Normy</span><small>Suroviny a Vianoce</small></div>
+        <div><span>Normy</span><small>Suroviny na koláče</small></div>
       </a>
       <a class="tile t-cennik" href="#cennik">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/></svg>
@@ -271,7 +276,7 @@ details.card summary{cursor:pointer;font-weight:700}
   <section id="normy" hidden>
     <a class="back" href="#">‹ Späť</a>
     <h2>Normy</h2>
-    <a class="row" href="#normy/vianoce-2026"><span>Vianoce 2026</span><span aria-hidden="true">›</span></a>
+    <div class="empty"><strong>Zatiaľ tu nič nie je.</strong>Tu pribudnú normy surovín na koláče a torty.</div>
   </section>
 
   <section id="cennik" hidden>
@@ -339,7 +344,7 @@ details.card summary{cursor:pointer;font-weight:700}
   </section>
 
   <section id="vianoce" hidden>
-    <a class="back" href="#normy">‹ Normy</a>
+    <a class="back" href="#">‹ Späť</a>
     <h2>Vianoce 2026</h2>
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="boxes">Krabičky</button>
@@ -359,7 +364,7 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,collection,onSnapshot,setDoc,deleteDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 (function(){
-  var routes={"":"home","recepty":"recepty","kalendar":"kalendar","spravy":"spravy","normy":"normy","normy/vianoce-2026":"vianoce","cennik":"cennik","cennik/torty":"cennik-torty","cennik/kolace":"cennik-kolace","cennik/napoje":"cennik-napoje","vyplaty":"vyplaty","naklady":"naklady","naklady/cukraren":"naklady-cukraren","naklady/firma":"naklady-firma","naklady/suroviny":"naklady-suroviny"};
+  var routes={"":"home","recepty":"recepty","kalendar":"kalendar","spravy":"spravy","normy":"normy","vianoce-2026":"vianoce","normy/vianoce-2026":"vianoce","cennik":"cennik","cennik/torty":"cennik-torty","cennik/kolace":"cennik-kolace","cennik/napoje":"cennik-napoje","vyplaty":"vyplaty","naklady":"naklady","naklady/cukraren":"naklady-cukraren","naklady/firma":"naklady-firma","naklady/suroviny":"naklady-suroviny"};
   var ids=["home","recepty","kalendar","spravy","normy","vianoce","cennik","cennik-torty","cennik-kolace","cennik-napoje","vyplaty","naklady","naklady-cukraren","naklady-firma","naklady-suroviny"];
   function show(){
     var h=(location.hash||"").replace("#","");
@@ -431,7 +436,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function inField(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#v-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName))}
   function refresh(){
-    if(!ready()||location.hash!=="#normy/vianoce-2026")return;
+    if(!ready()||document.getElementById("vianoce").hidden)return;
     if(inField()){pending=true;return}
     render();
   }
