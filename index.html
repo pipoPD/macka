@@ -1090,6 +1090,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   var kTh={},kThLoad={},kPhotosOk=null;
   var kView=(function(){try{return localStorage.getItem("mt_cal_view")==="list"?"list":"grid"}catch(e){return "grid"}})();
   var kBody=document.getElementById("k-body");
+  var MC={url:"",token:""},sBusyCfg=false,sCfgErr="";
   var SC={addr:"",name:""},sList={},sTab="inbox",sQ="",sOpen=null,sThread=null,sErr="",sLoading=false,sReply=false,sBusy=false;
   var KCOL={"1":"#7986CB","2":"#33B679","3":"#8E24AA","4":"#E67C73","5":"#F6BF26","6":"#F4511E","7":"#039BE5","8":"#616161","9":"#3F51B5","10":"#0B8043","11":"#D50000"};
   var KDN=["nedeľa","pondelok","utorok","streda","štvrtok","piatok","sobota"];
@@ -1115,12 +1116,15 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     kUnsub=onSnapshot(kRef,function(snap){
       var c=(snap.exists()&&snap.data().cal)||{},ml=(snap.exists()&&snap.data().mail)||{};
       SC={addr:ml.addr||"",name:ml.name||""};
+      var ma=(snap.exists()&&snap.data().mailApi)||{},mch=(ma.url||"")!==MC.url||(ma.token||"")!==MC.token;
+      MC={url:ma.url||"",token:ma.token||""};
       var ch=(c.url||"")!==KC.url||(c.token||"")!==KC.token;
       KC={url:c.url||"",token:c.token||""};kGot=true;
       if(ch){kData={};kErr="";kSetup=false}
       if(location.hash==="#kalendar"&&!kInField()&&!kForm)renderK(ch);
-      if(ch){sList={};sThread=null;sErr=""}
-      if(location.hash==="#spravy"&&!sInField())renderS(ch);
+      var sch=MC.url?mch:(ch||mch);
+      if(sch){sList={};sThread=null;sOpen=null;sErr="";try{localStorage.removeItem("mt_cal_mail_inbox");localStorage.removeItem("mt_cal_mail_sent")}catch(e){}}
+      if(location.hash==="#spravy"&&!sInField())renderS(sch);
     },fail);
   }
   function stopK(){
@@ -1514,6 +1518,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   // Adresa firmy (Reply-To) a meno odosielateľa sú len vo Firebase (apps/nastavenia → mail).
   var sBody=document.getElementById("s-body");
   var SMN=["januára","februára","marca","apríla","mája","júna","júla","augusta","septembra","októbra","novembra","decembra"];
+  function sApiCfg(){return MC.url&&MC.token?MC:KC}
+  function sOn(){var c=sApiCfg();return !!(c.url&&c.token)}
   function sInField(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#s-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName))}
   function sQuery(){return sTab==="sent"?"in:sent":sTab==="search"?(sQ||"in:inbox"):"in:inbox"}
   function sWhen(dt){
@@ -1541,10 +1547,10 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     return {main:lines.slice(0,cut).join("\n").trim(),quote:lines.slice(cut).join("\n").trim()};
   }
   function sLoad(more){
-    if(!kOn()||sLoading||(sTab==="search"&&!sQ))return;
+    if(!sOn()||sLoading||(sTab==="search"&&!sQ))return;
     var tab=sTab,q=sQuery(),cur=sList[tab],start=more&&cur?cur.threads.length:0;
     sLoading=true;sErr="";
-    kApi({action:"mail_list",q:q,start:start,max:25}).then(function(d){
+    kApi({action:"mail_list",q:q,start:start,max:25},sApiCfg()).then(function(d){
       if(tab!==sTab||q!==sQuery())return;
       var th=d.threads||[];
       sList[tab]={q:q,threads:more&&cur?cur.threads.concat(th):th,more:!!d.more};
@@ -1556,7 +1562,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function sOpenThread(id){
     sOpen=id;sThread=null;sReply=false;sErr="";renderS();window.scrollTo(0,0);
-    kApi({action:"mail_get",id:id,markRead:true}).then(function(d){
+    kApi({action:"mail_get",id:id,markRead:true},sApiCfg()).then(function(d){
       if(sOpen!==id)return;
       sThread=d;
       Object.keys(sList).forEach(function(k){(sList[k].threads||[]).forEach(function(t){if(t.id===id)t.unread=false})});
@@ -1606,17 +1612,30 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     }
     return h;
   }
-  function sSetupView(){
-    var h='<details class="card" style="margin-top:22px"><summary>Nastavenie správ</summary>';
-    h+='<div class="small" style="margin-top:8px">E-maily sa čítajú z firemného Gmailu cez ten istý skript ako Kalendár. Aby tu boli e-maily z firemnej adresy, treba u poskytovateľa schránky zapnúť <strong>preposielanie kópie</strong> do firemného Gmailu (v pôvodnej schránke zostanú, Thunderbird funguje ďalej).</div>';
-    h+='<div class="vgrid"><label class="full">Adresa firmy (sem pôjdu odpovede zákazníkov)<input id="sAddr" type="email" value="'+esc(SC.addr)+'" autocomplete="off"></label>';
+  function sSetupView(open){
+    var own=!!(MC.url&&MC.token);
+    var h='<details class="card" style="margin-top:22px"'+(open||sCfgErr||sBusyCfg?' open':'')+'><summary>Nastavenie správ</summary>';
+    h+='<div class="small" style="margin-top:8px">'+(own?'E-maily sa čítajú z <strong>vlastného Gmailu pre správy</strong> (samostatný skript).':'E-maily sa zatiaľ čítajú z Gmailu firemného kalendára (ten istý skript ako Kalendár).')+'</div>';
+    h+='<h3 style="margin-top:14px;font-size:1.05rem">Gmail pre správy</h3>';
+    h+='<ol class="ksteps small"><li>Prihlás sa do Gmailu pre správy (napr. cukrarenpd@gmail.com) a otvor <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → Nový projekt</a>.</li>';
+    h+='<li>Vlož kód skriptu (tlačidlo nižšie) a ulož (Ctrl+S).</li>';
+    h+='<li>Hore vyber funkciu <strong>nastav</strong> → <strong>Run</strong> → povoľ prístup. V logu je <strong>KĽÚČ</strong>.</li>';
+    h+='<li><strong>Deploy → New deployment</strong> → Web app, Execute as: <strong>Me</strong>, Who has access: <strong>Anyone</strong> → Deploy, skopíruj URL (končí na /exec).</li>';
+    h+='<li>Sem vlož URL a kľúč a klikni Uložiť a overiť.</li></ol>';
+    h+='<div class="form"><button class="x" data-act="sCopy">Kopírovať kód skriptu</button></div>';
+    h+='<div class="vgrid"><label class="full">URL skriptu Gmailu<input id="sUrl" type="url" value="'+esc(MC.url)+'" placeholder="https://script.google.com/…/exec" autocomplete="off"></label>';
+    h+='<label class="full">Kľúč<input id="sTok" type="text" value="'+esc(MC.token)+'" autocomplete="off" spellcheck="false"></label></div>';
+    h+='<div class="form"><button class="btn" data-act="sSaveApi"'+(sBusyCfg?' disabled':'')+'>'+(sBusyCfg?'Overujem…':'Uložiť a overiť')+'</button>'+(own?'<button class="x" data-act="sOffApi">Použiť Gmail kalendára</button>':'')+'</div>';
+    if(sCfgErr)h+='<div class="small" style="color:var(--berry);margin-top:6px">'+esc(sCfgErr)+'</div>';
+    h+='<h3 style="margin-top:16px;font-size:1.05rem">Odpovede</h3>';
+    h+='<div class="vgrid"><label class="full">Adresa firmy (sem pôjdu odpovede zákazníkov, môže ostať prázdna)<input id="sAddr" type="email" value="'+esc(SC.addr)+'" autocomplete="off"></label>';
     h+='<label class="full">Meno odosielateľa<input id="sName" type="text" value="'+esc(SC.name)+'" placeholder="napr. Macka. cukráreň" autocomplete="off"></label></div>';
     h+='<div class="form"><button class="btn" data-act="sSaveCfg">Uložiť</button></div></details>';
     return h;
   }
   function renderS(load){
     if(!cfgOk||!kGot){sBody.innerHTML='<div class="empty">Načítavam…</div>';return}
-    if(!kOn()){sBody.innerHTML='<div class="empty"><strong>Správy ešte nie sú prepojené.</strong>E-maily idú cez to isté prepojenie ako Kalendár. Najprv prepoj <a href="#kalendar">Kalendár</a>.</div>';return}
+    if(!sOn()){sBody.innerHTML='<div class="empty"><strong>Správy ešte nie sú prepojené.</strong>Prepoj Gmail v Nastavení správ nižšie (alebo najprv <a href="#kalendar">Kalendár</a>).</div>'+sSetupView(true);return}
     if(load&&!sOpen)sLoad();
     sBody.innerHTML=(sOpen?sThreadView():sListView())+(sOpen?'':sSetupView());
   }
@@ -1673,20 +1692,41 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(!confirm("Odoslať odpoveď"+(to?" pre "+to:"")+"?"))return;
       sBusy=true;t.disabled=true;t.textContent="Odosielam…";tx.readOnly=true;
       var id=sOpen;
-      kApi({action:"mail_reply",id:id,body:body,addr:SC.addr,name:SC.name}).then(function(){
+      kApi({action:"mail_reply",id:id,body:body,addr:SC.addr,name:SC.name},sApiCfg()).then(function(){
         sBusy=false;sReply=false;toast("Odpoveď odoslaná");delete sList.sent;sOpenThread(id);
       }).catch(function(e){sBusy=false;t.disabled=false;t.textContent="Odoslať";tx.readOnly=false;toast(e.message)});
       return;
     }
     if(a==="sUnread"){
       var id2=sOpen;t.disabled=true;
-      kApi({action:"mail_read",id:id2,read:false}).then(function(){
+      kApi({action:"mail_read",id:id2,read:false},sApiCfg()).then(function(){
         Object.keys(sList).forEach(function(k){(sList[k].threads||[]).forEach(function(x){if(x.id===id2)x.unread=true})});
         sOpen=null;sThread=null;renderS();toast("Označené ako neprečítané");
       }).catch(function(e){t.disabled=false;toast(e.message)});
       return;
     }
     if(a==="sCal"){if(!sThread)return;kPre=sGuess(sThread);location.hash="#kalendar";setTimeout(kFocusForm,50);return}
+    if(a==="sCopy"){
+      fetch("google-apps-script/Kalendar.gs",{cache:"no-store"}).then(function(r){return r.text()}).then(function(tx){return navigator.clipboard.writeText(tx)}).then(function(){toast("Kód skriptu je skopírovaný")},function(){toast("Kopírovanie nefunguje, otvor kód: raw.githubusercontent.com/pipoPD/macka/main/google-apps-script/Kalendar.gs")});
+      return;
+    }
+    if(a==="sSaveApi"){
+      var su=document.getElementById("sUrl").value.trim(),st=document.getElementById("sTok").value.trim();
+      if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(su)){sCfgErr="URL musí začínať https://script.google.com/ a končiť na /exec.";renderS();return}
+      if(!st){sCfgErr="Chýba kľúč.";renderS();return}
+      sBusyCfg=true;sCfgErr="";renderS();
+      kApi({action:"mail_list",q:"in:inbox",start:0,max:1},{url:su,token:st}).then(function(){
+        return kApi({action:"info"},{url:su,token:st}).catch(function(){return {}});
+      }).then(function(d){
+        sBusyCfg=false;
+        return setDoc(kRef,{mailApi:{url:su,token:st}},{merge:true}).then(function(){toast("Gmail pre správy je prepojený"+(d&&d.name?": "+d.name:""))});
+      }).catch(function(e){sBusyCfg=false;sCfgErr=sErrMsg(e);renderS();var u=document.getElementById("sUrl"),k=document.getElementById("sTok");if(u)u.value=su;if(k)k.value=st});
+      return;
+    }
+    if(a==="sOffApi"){
+      if(!confirm("Prestať používať samostatný Gmail pre správy a čítať e-maily z Gmailu kalendára?"))return;
+      setDoc(kRef,{mailApi:{url:"",token:""}},{merge:true}).catch(fail);return;
+    }
     if(a==="sSaveCfg"){
       var ad=document.getElementById("sAddr").value.trim(),nm=document.getElementById("sName").value.trim();
       if(ad&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ad)){toast("Skontroluj adresu");return}
