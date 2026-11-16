@@ -1,8 +1,9 @@
 /**
- * Macka. – prepojenie s Google Kalendárom firmy
+ * Macka. – prepojenie s Google Kalendárom a Gmailom firmy
  *
  * Tento skript beží vo firemnom Google účte a appke Macka. sprístupní
- * firemný kalendár (čítanie, pridanie a zmazanie udalosti).
+ * firemný kalendár (čítanie, pridanie, úprava a zmazanie udalosti)
+ * a Gmail (zoznam e-mailov, čítanie, odpoveď) pre sekciu Správy.
  * Prístup je chránený tajným kľúčom, ktorý je uložený len vo vlastnostiach
  * skriptu a vo Firebase (nie v kóde).
  *
@@ -19,6 +20,8 @@
  *
  * Po zmene tohto kódu: vlož nový kód, ulož, potom Nasadiť → Spravovať nasadenia
  * → ceruzka (Upraviť) → Verzia: Nová verzia → Nasadiť. URL zostane rovnaká.
+ * Ak nová verzia potrebuje nové povolenie (napr. Gmail), najprv hore vyber
+ * funkciu „nastav“ → Spustiť → povoľ prístup. Kľúč sa tým nezmení.
  */
 
 // Prázdne = hlavný kalendár firemného účtu. Iný kalendár: vlož jeho ID
@@ -34,6 +37,7 @@ function nastav() {
   }
   var c = cal_();
   Logger.log('Kalendár: ' + c.getName() + ' (' + c.getTimeZone() + ')');
+  Logger.log('Gmail: ' + GmailApp.getInboxUnreadCount() + ' neprečítaných v Doručených');
   Logger.log('KĽÚČ pre appku: ' + t);
 }
 
@@ -136,8 +140,100 @@ function handle_(p) {
       return out_({ ok: true });
     }
 
+    if (p.action === 'mail_list') return out_(mailList_(p, tz));
+    if (p.action === 'mail_get') return out_(mailGet_(p, tz));
+    if (p.action === 'mail_reply') return out_(mailReply_(p));
+    if (p.action === 'mail_read') {
+      var th0 = GmailApp.getThreadById(p.id);
+      if (!th0) return out_({ ok: false, error: 'email sa nenasiel' });
+      if (p.read) th0.markRead(); else th0.markUnread();
+      return out_({ ok: true });
+    }
+
     return out_({ ok: false, error: 'neznama akcia' });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+/* ---- Gmail (sekcia Správy) ---- */
+
+function who_(s) {
+  s = String(s || '');
+  var m = s.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  return m ? { name: m[1].trim(), email: m[2].trim() } : { name: '', email: s.trim() };
+}
+
+function mailList_(p, tz) {
+  var q = String(p.q || 'in:inbox');
+  var start = Math.max(0, +p.start || 0), max = Math.min(50, Math.max(1, +p.max || 25));
+  var threads = GmailApp.search(q, start, max);
+  var msgs = threads.length ? GmailApp.getMessagesForThreads(threads) : [];
+  var list = threads.map(function (t, i) {
+    var ms = msgs[i] || [], last = ms[ms.length - 1], first = ms[0];
+    var other = null;
+    for (var j = ms.length - 1; j >= 0; j--) { if (!ms[j].isDraft()) { other = ms[j]; break; } }
+    var txt = last ? String(last.getPlainBody() || '').replace(/\s+/g, ' ').trim() : '';
+    return {
+      id: t.getId(),
+      subject: t.getFirstMessageSubject() || '',
+      from: who_(other ? other.getFrom() : ''),
+      to: last ? last.getTo() : '',
+      date: Utilities.formatDate(t.getLastMessageDate(), tz, "yyyy-MM-dd'T'HH:mm"),
+      unread: t.isUnread(),
+      count: t.getMessageCount(),
+      star: t.hasStarredMessages(),
+      snip: txt.slice(0, 160)
+    };
+  });
+  return { ok: true, threads: list, more: threads.length === max };
+}
+
+function mailGet_(p, tz) {
+  var t = GmailApp.getThreadById(p.id);
+  if (!t) return { ok: false, error: 'email sa nenasiel' };
+  var ms = t.getMessages().filter(function (m) { return !m.isDraft() && !m.isInTrash(); }).map(function (m) {
+    return {
+      id: m.getId(),
+      from: who_(m.getFrom()),
+      to: m.getTo() || '',
+      cc: m.getCc() || '',
+      replyTo: m.getReplyTo() || '',
+      date: Utilities.formatDate(m.getDate(), tz, "yyyy-MM-dd'T'HH:mm"),
+      subject: m.getSubject() || '',
+      body: String(m.getPlainBody() || '').slice(0, 30000),
+      att: m.getAttachments({ includeInlineImages: false }).map(function (a) {
+        return { name: a.getName(), size: a.getSize() };
+      })
+    };
+  });
+  if (p.markRead && t.isUnread()) t.markRead();
+  return { ok: true, id: t.getId(), subject: t.getFirstMessageSubject() || '', messages: ms, me: Session.getEffectiveUser().getEmail() };
+}
+
+// Odpoveď na posledný e-mail vo vlákne. Ak má Gmail nastavenú adresu firmy
+// v „Odoslať ako“, pošle sa z nej; inak z Gmailu a odpovede zákazníka
+// pôjdu na adresu firmy (Reply-To).
+function mailReply_(p) {
+  var t = GmailApp.getThreadById(p.id);
+  if (!t) return { ok: false, error: 'email sa nenasiel' };
+  var body = String(p.body || '').trim();
+  if (!body) return { ok: false, error: 'prazdna odpoved' };
+  var ms = t.getMessages().filter(function (m) { return !m.isDraft(); });
+  var me = Session.getEffectiveUser().getEmail().toLowerCase();
+  var addr = String(p.addr || '').trim().toLowerCase();
+  var target = null;
+  for (var i = ms.length - 1; i >= 0; i--) {
+    var f = who_(ms[i].getFrom()).email.toLowerCase();
+    if (f !== me && f !== addr) { target = ms[i]; break; }
+  }
+  if (!target) target = ms[ms.length - 1];
+  var opt = {};
+  if (p.name) opt.name = String(p.name);
+  if (addr) {
+    var al = GmailApp.getAliases().map(function (a) { return a.toLowerCase(); });
+    if (al.indexOf(addr) >= 0) opt.from = addr; else opt.replyTo = addr;
+  }
+  target.reply(body, opt);
+  return { ok: true, from: opt.from || me };
 }
