@@ -1715,6 +1715,24 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     sBody.innerHTML=(sOpen?sThreadView():sListView())+(sOpen?'':sSetupView());
   }
   // Návrh udalosti z e-mailu: dátum, čas a telefón z textu správy
+  // Z textu e-mailu vyberie len vety o objednávke (produkt, príchuť, počet, nápis…) a cenu
+  function sPick(txt){
+    var names=[];
+    ["torty","kolace"].forEach(function(c){(CN[c]||[]).forEach(function(it){var n=String(it.name||"").toLowerCase().trim();if(n.length>3)names.push(n.split(/\s+/)[0].slice(0,Math.max(4,n.split(/\s+/)[0].length-2)))})});
+    var kw=/tort|koláč|kolac|cheesecak|makron|pavlov|cupcak|dezert|krabič|candy|veterník|výslužk|poschod|príchu|chuť|plnk|krém|čokol|ovoc|malin|jahod|pistác|vanil|karamel|nápis|osôb|osoby|ľudí|\bks\b|kus|\bkg\b|alerg|bezlep|laktóz|vegán|ozdob|dekor|zdoben|farb|figúr|tém|fotk|obrázk|jedlý|odber|vyzdvihn|rozvoz|doruč/i;
+    var skip=/^(dobrý\s+deň|dobry\s+den|zdravím|ahoj|dobrý\s+večer|ďakujem|dakujem|vďaka|s\s+pozdravom|s\s+pozdravem|pekný\s+deň|prajem|sent\s+from|odoslané\s+z|odoslané\s+zo)/i;
+    var parts=String(txt||"").replace(/\r/g,"").split(/\n+|(?<=[.!?])\s+(?=[A-ZÁČĎÉÍĽĹŇÓÔŔŠŤÚÝŽ0-9])/);
+    var out=[],cena="";
+    parts.forEach(function(p){
+      p=p.replace(/\s+/g," ").trim();if(!p||p.length<4||skip.test(p))return;
+      var c=/(\d+(?:[.,]\d{1,2})?)\s*(?:€|eur\b|eur\.|euro)/i.exec(p);if(c&&!cena)cena=c[1].replace(".",",")+" €";
+      var low=p.toLowerCase(),hit=kw.test(p)||names.some(function(n){return low.indexOf(n)>=0});
+      if(hit&&out.indexOf(p)<0)out.push(p);
+    });
+    var obj=out.join(" ").replace(/\s+/g," ").trim();
+    if(obj.length>400)obj=obj.slice(0,400).replace(/\s+\S*$/,"")+"…";
+    return {obj:obj,cena:cena};
+  }
   function sGuess(T){
     var me=(T.me||"").toLowerCase(),addr=(SC.addr||"").toLowerCase(),m=null;
     for(var i=T.messages.length-1;i>=0;i--){var f=(T.messages[i].from.email||"").toLowerCase();if(f!==me&&f!==addr){m=T.messages[i];break}}
@@ -1743,7 +1761,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var tr=/(?:\+|00)421[\s\/-]?\d{3}[\s\/-]?\d{3}[\s\/-]?\d{3}|\b09\d{2}[\s\/-]?\d{3}[\s\/-]?\d{3}\b/.exec(all);
     if(tr)tel=tr[0].replace(/\s+/g," ");
     var name=m.from.name||m.from.email||"";
-    var desc=(tel?"Tel: "+tel+"\n":"")+"E-mail: "+(m.from.email||"")+"\nPredmet: "+(T.subject||"")+"\n\n"+txt.slice(0,1500);
+    var pk=sPick(txt||all);
+    var desc=(tel?"Tel: "+tel:"E-mail: "+(m.from.email||""))+(from?"\nOdber: "+from.replace(":","."):"")+(pk.obj?"\nObjednávka: "+pk.obj:"")+(pk.cena?"\nCena: "+pk.cena:"");
     return {date:date||today,from:from,title:name+(from?" "+from.replace(":","."):""),desc:desc.trim()};
   }
   sBody.addEventListener("submit",function(ev){
