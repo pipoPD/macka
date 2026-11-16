@@ -112,6 +112,18 @@ td.r,th.r{text-align:right}
 .scroll th,.scroll td{white-space:nowrap}
 tfoot td{font-weight:700;border-bottom:0}
 .linkbtn{font:inherit;font-weight:700;border:0;background:transparent;color:var(--berry);cursor:pointer;padding:0}
+.kday{margin-top:14px}
+.kday h3{font-size:1.05rem;margin:0 0 6px;color:var(--muted);font-family:"Nunito",system-ui,sans-serif;font-weight:700;text-transform:capitalize}
+.kday.today h3{color:var(--berry)}
+.kev{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--kc,var(--berry));border-radius:14px;padding:10px 12px;margin-top:6px;box-shadow:var(--shadow)}
+.kev .kt{flex:none;width:58px;font-weight:700;font-size:.9rem;color:var(--muted)}
+.kev .kn{flex:1;min-width:0}
+.kev .kn strong{display:block;overflow-wrap:anywhere}
+.kev .kn .small{white-space:pre-line;overflow-wrap:anywhere}
+.ksteps{margin:8px 0 0;padding-left:20px}
+.ksteps li{margin:4px 0}
+textarea{font:inherit;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%;min-height:64px;resize:vertical}
+details.card summary{cursor:pointer;font-weight:700}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){.tile{transition:none}}
 @media (min-width:560px){.tile{min-height:190px}}
@@ -197,7 +209,7 @@ tfoot td{font-weight:700;border-bottom:0}
   <section id="kalendar" hidden>
     <a class="back" href="#">‹ Späť</a>
     <h2>Kalendár</h2>
-    <div class="empty"><strong>Kalendár je zatiaľ prázdny.</strong>Tu pribudnú objednávky a termíny.</div>
+    <div id="k-body"></div>
   </section>
 
   <section id="spravy" hidden>
@@ -304,6 +316,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     ids.forEach(function(id){document.getElementById(id).hidden=(id!==t)});
     if(t==="vianoce")render();
     if(t==="vyplaty")renderV();
+    if(t==="kalendar")renderK(true);
     window.scrollTo(0,0);
   }
   window.addEventListener("hashchange",show);
@@ -385,12 +398,12 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       arr.sort(function(a,b){return (a.no||0)-(b.no||0)});
       S.orders=arr;gotOrders=true;refresh();
     },fail));
-    startV();
+    startV();startK();
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
     S={cakes:[],boxes:[],orders:[],pair:105};lastCfg="";lastOrders={};editId=null;
-    stopV();
+    stopV();stopK();
   }
   function initAuth(){
     var lg=document.getElementById("login"),msg=document.getElementById("loginMsg"),form=document.getElementById("loginForm");
@@ -848,6 +861,173 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(!vPending)return;
     setTimeout(function(){if(vInField())return;vPending=false;renderV()},600);
   });
+
+  /* ---- Kalendár: Google Kalendár firmy cez Google Apps Script ---- */
+  // URL skriptu a kľúč sú len vo Firebase (apps/nastavenia → cal), nie v kóde.
+  var KC={url:"",token:""},kGot=false,kUnsub=null,kRef=cfgOk?doc(db,"apps","nastavenia"):null;
+  var kMonth=(function(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")})();
+  var kData={},kLoading={},kErr="",kName="",kSetup=false,kAdd=false,kBusy=false,kCode="";
+  var kBody=document.getElementById("k-body");
+  var KCOL={"1":"#7986CB","2":"#33B679","3":"#8E24AA","4":"#E67C73","5":"#F6BF26","6":"#F4511E","7":"#039BE5","8":"#616161","9":"#3F51B5","10":"#0B8043","11":"#D50000"};
+  var KDN=["nedeľa","pondelok","utorok","streda","štvrtok","piatok","sobota"];
+  function kToday(){var d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+  function kOn(){return !!(KC.url&&KC.token)}
+  function kInField(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#k-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName))}
+  function startK(){
+    if(!cfgOk||kUnsub)return;
+    kUnsub=onSnapshot(kRef,function(snap){
+      var c=(snap.exists()&&snap.data().cal)||{};
+      var ch=(c.url||"")!==KC.url||(c.token||"")!==KC.token;
+      KC={url:c.url||"",token:c.token||""};kGot=true;
+      if(ch){kData={};kErr="";kSetup=false}
+      if(location.hash==="#kalendar"&&!kInField())renderK(ch);
+    },fail);
+  }
+  function stopK(){
+    if(kUnsub)kUnsub();kUnsub=null;kGot=false;KC={url:"",token:""};kData={};kErr="";kName="";kAdd=false;kSetup=false;
+    try{Object.keys(localStorage).forEach(function(k){if(k.indexOf("mt_cal_")===0)localStorage.removeItem(k)})}catch(e){}
+  }
+  function kApi(body,cfg){
+    cfg=cfg||KC;
+    var b={token:cfg.token};Object.keys(body).forEach(function(k){b[k]=body[k]});
+    return fetch(cfg.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(b)})
+      .catch(function(){throw new Error(navigator.onLine===false?"Si offline.":"Nepodarilo sa spojiť so skriptom. Skontroluj URL a že prístup je „Ktokoľvek“.")})
+      .then(function(r){if(!r.ok)throw new Error("Skript vrátil chybu "+r.status+".");return r.json().catch(function(){throw new Error("Skript neodpovedal správne. Skontroluj URL (musí končiť na /exec) a nasadenie.")})})
+      .then(function(d){if(!d||!d.ok)throw new Error(d&&d.error==="kluc"?"Nesprávny kľúč.":"Chyba skriptu: "+((d&&d.error)||"neznáma"));return d});
+  }
+  function kCacheGet(ym){try{var v=localStorage.getItem("mt_cal_"+ym);return v?JSON.parse(v):null}catch(e){return null}}
+  function kLoad(ym){
+    if(!kOn()||kLoading[ym])return;
+    kLoading[ym]=true;
+    kApi({action:"list",from:ym+"-01",to:ymAdd(ym,1)+"-01"}).then(function(d){
+      kData[ym]=d.events||[];kName=d.name||kName;kErr="";
+      try{localStorage.setItem("mt_cal_"+ym,JSON.stringify(kData[ym]))}catch(e){}
+    }).catch(function(e){kErr=e.message}).then(function(){
+      delete kLoading[ym];
+      if(location.hash==="#kalendar"&&!kInField())renderK();
+    });
+  }
+  function kDesc(t){return String(t||"").replace(/<br\s*\/?>/gi,"\n").replace(/<\/p>/gi,"\n").replace(/<[^>]+>/g,"").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").trim()}
+  function kShort(ds){var p=ds.split("-");return (+p[2])+". "+(+p[1])+"."}
+  function kDayLabel(ds){var p=ds.split("-"),d=new Date(+p[0],+p[1]-1,+p[2]);return KDN[d.getDay()]+" "+(+p[2])+". "+(+p[1])+"."}
+  function kAddDays(ds,n){var p=ds.split("-"),d=new Date(+p[0],+p[1]-1,+p[2]+n);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+  function kSetupView(){
+    var h='<div class="card"><h3>Prepojenie s Google Kalendárom</h3>';
+    h+='<div class="small">Firemný kalendár sa do appky napojí cez malý skript vo firemnom Google účte. Stačí to urobiť raz, najlepšie na počítači.</div>';
+    h+='<ol class="ksteps small">';
+    h+='<li>Prihlás sa do <strong>firemného</strong> Google účtu a otvor <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → Nový projekt</a>.</li>';
+    h+='<li>Vymaž, čo tam je, vlož kód skriptu (tlačidlo nižšie ho skopíruje) a ulož (Ctrl+S). Projekt pomenuj „Macka. Kalendár“.</li>';
+    h+='<li>Hore vyber funkciu <strong>nastav</strong> → <strong>Spustiť</strong> → povoľ prístup ku kalendáru. Dole v protokole sa zobrazí <strong>KĽÚČ</strong>.</li>';
+    h+='<li><strong>Nasadiť → Nové nasadenie</strong> → typ <strong>Webová aplikácia</strong>. Spustiť ako: <strong>Ja</strong>, Kto má prístup: <strong>Ktokoľvek</strong> → Nasadiť. Skopíruj <strong>URL</strong> (končí na /exec).</li>';
+    h+='<li>Sem vlož URL a kľúč a klikni Uložiť.</li></ol>';
+    h+='<div class="form"><button class="btn" data-act="kCopy">Kopírovať kód skriptu</button><a class="btn" style="background:var(--surface);color:var(--berry);border:1px solid var(--line)" href="https://github.com/pipoPD/macka/blob/main/google-apps-script/Kalendar.gs" target="_blank" rel="noopener">Zobraziť kód</a></div>';
+    h+='<div class="form"><input class="grow" id="kUrl" type="url" placeholder="URL webovej aplikácie (https://script.google.com/…/exec)" value="'+esc(KC.url)+'" autocomplete="off"></div>';
+    h+='<div class="form"><input class="grow" id="kTok" type="text" placeholder="Kľúč" value="'+esc(KC.token)+'" autocomplete="off" spellcheck="false"></div>';
+    h+='<div class="form"><button class="btn" data-act="kSave"'+(kBusy?' disabled':'')+'>'+(kBusy?'Overujem…':'Uložiť a overiť')+'</button>'+(kOn()?'<button class="x" data-act="kCancel">Zrušiť</button>':'')+'</div>';
+    if(kErr)h+='<div class="small" style="color:var(--berry);margin-top:8px">'+esc(kErr)+'</div>';
+    h+='</div>';
+    return h;
+  }
+  function kAddView(){
+    var t=kToday(),def=t.slice(0,7)===kMonth?t:kMonth+"-01";
+    var h='<div class="card"><h3>Nová udalosť</h3><div class="vgrid">';
+    h+='<label class="full">Názov<input id="kaT" type="text" placeholder="napr. Odber torty – Nováková"></label>';
+    h+='<label>Dátum<input id="kaD" type="date" value="'+def+'"></label>';
+    h+='<label>Od<input id="kaF" type="time"></label>';
+    h+='<label>Do<input id="kaE" type="time"></label>';
+    h+='<label class="full">Poznámka<textarea id="kaN"></textarea></label></div>';
+    h+='<div class="small" style="margin-top:6px">Bez času sa udalosť uloží na celý deň.</div>';
+    h+='<div class="form"><button class="btn" data-act="kAddSave"'+(kBusy?' disabled':'')+'>'+(kBusy?'Ukladám…':'Uložiť do kalendára')+'</button><button class="x" data-act="kAddCancel">Zrušiť</button></div></div>';
+    return h;
+  }
+  function renderK(load){
+    if(!cfgOk||!kGot){kBody.innerHTML='<div class="empty">Načítavam…</div>';return}
+    if(!kOn()||kSetup){kBody.innerHTML=kSetupView();if(!kCode)fetch("google-apps-script/Kalendar.gs").then(function(r){return r.ok?r.text():""}).then(function(t){kCode=t}).catch(function(){});return}
+    if(load)kLoad(kMonth);
+    var ev=kData[kMonth]||kCacheGet(kMonth),loading=!!kLoading[kMonth];
+    var h='<div class="mbar"><button class="x" data-act="kPrev" aria-label="Predchádzajúci mesiac">‹</button><h3>'+esc(ymLabel(kMonth))+'</h3><button class="x" data-act="kNext" aria-label="Ďalší mesiac">›</button></div>';
+    h+='<div class="form" style="justify-content:center"><button class="btn" data-act="kAdd">+ Pridať</button><button class="x" data-act="kToday">Dnes</button><button class="x" data-act="kReload">'+(loading?'Načítavam…':'Obnoviť')+'</button></div>';
+    if(kErr)h+='<div class="card small" style="color:var(--berry)">'+esc(kErr)+(ev?' Zobrazujem naposledy načítané udalosti.':'')+'</div>';
+    if(kAdd)h+=kAddView();
+    if(!ev){h+='<div class="empty">'+(loading?'Načítavam udalosti z Google Kalendára…':'Udalosti sa nepodarilo načítať.')+'</div>'}
+    else if(!ev.length){h+='<div class="empty"><strong>Žiadne udalosti.</strong>V tomto mesiaci nie je v kalendári nič naplánované.</div>'}
+    else{
+      var first=kMonth+"-01",days={},order=[],today=kToday();
+      ev.forEach(function(e){
+        var d=e.start.slice(0,10);if(d<first)d=first;
+        if(!days[d]){days[d]=[];order.push(d)}days[d].push(e);
+      });
+      order.sort();
+      order.forEach(function(d){
+        var list=days[d].slice().sort(function(a,b){return (a.allDay?0:1)-(b.allDay?0:1)||a.start.localeCompare(b.start)});
+        h+='<div class="kday'+(d===today?' today':'')+'"><h3>'+(d===today?'Dnes · ':'')+esc(kDayLabel(d))+'</h3>';
+        list.forEach(function(e){
+          var tm=e.allDay?'celý deň':e.start.slice(11,16)+(e.end&&e.end.slice(0,10)===e.start.slice(0,10)?'–'+e.end.slice(11,16):'');
+          var multi=e.allDay&&e.end&&kAddDays(e.start,1)<e.end?'až do '+kShort(kAddDays(e.end,-1)):(!e.allDay&&e.end&&e.end.slice(0,10)!==e.start.slice(0,10)?'až do '+kShort(e.end.slice(0,10))+' '+e.end.slice(11,16):'');
+          var col=KCOL[e.color]||"";
+          h+='<div class="kev"'+(col?' style="--kc:'+col+'"':'')+'><div class="kt">'+esc(tm)+'</div><div class="kn"><strong>'+esc(e.title||"(bez názvu)")+'</strong>';
+          if(multi)h+='<div class="small">'+esc(multi)+'</div>';
+          if(e.loc)h+='<div class="small">📍 '+esc(e.loc)+'</div>';
+          var ds=kDesc(e.desc);if(ds)h+='<div class="small">'+esc(ds)+'</div>';
+          h+='</div>'+(e.rec?'':'<button class="x" data-act="kDel" data-id="'+esc(e.id)+'" data-t="'+esc(e.title||"")+'" aria-label="Zmazať">×</button>')+'</div>';
+        });
+        h+='</div>';
+      });
+    }
+    h+='<details class="card" style="margin-top:22px"><summary>Nastavenie prepojenia</summary><div class="small" style="margin-top:8px">'+(kName?'Prepojený kalendár: <strong>'+esc(kName)+'</strong>':'Kalendár je prepojený.')+'</div><div class="form"><button class="x" data-act="kEdit">Zmeniť URL alebo kľúč</button><button class="x" data-act="kOff">Odpojiť</button></div></details>';
+    kBody.innerHTML=h;
+  }
+  kBody.addEventListener("click",function(ev){
+    var t=ev.target.closest("button");if(!t)return;
+    var a=t.dataset.act;if(!a)return;
+    if(a==="kPrev"||a==="kNext"){kMonth=ymAdd(kMonth,a==="kPrev"?-1:1);kErr="";renderK(true);return}
+    if(a==="kToday"){kMonth=kToday().slice(0,7);kErr="";renderK(true);return}
+    if(a==="kReload"){kErr="";renderK(true);return}
+    if(a==="kAdd"){kAdd=true;renderK();var i=document.getElementById("kaT");if(i)i.focus();return}
+    if(a==="kAddCancel"){kAdd=false;renderK();return}
+    if(a==="kEdit"){kSetup=true;kErr="";renderK();return}
+    if(a==="kCancel"){kSetup=false;kErr="";renderK();return}
+    if(a==="kOff"){
+      if(!confirm("Odpojiť Google Kalendár z appky? Kalendár ani skript sa tým nezmažú."))return;
+      setDoc(kRef,{cal:{url:"",token:""}},{merge:true}).catch(fail);return;
+    }
+    if(a==="kCopy"){
+      var done=function(){toast("Kód skriptu je skopírovaný")},bad=function(){toast("Kopírovanie nefunguje, otvor „Zobraziť kód“ a skopíruj ho ručne")};
+      if(kCode&&navigator.clipboard){navigator.clipboard.writeText(kCode).then(done,bad);return}
+      fetch("google-apps-script/Kalendar.gs").then(function(r){return r.text()}).then(function(tx){kCode=tx;return navigator.clipboard.writeText(tx)}).then(done,bad);
+      return;
+    }
+    if(a==="kSave"){
+      var url=document.getElementById("kUrl").value.trim(),tok=document.getElementById("kTok").value.trim();
+      if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(url)){kErr="URL musí začínať https://script.google.com/ a končiť na /exec.";renderK();return}
+      if(!tok){kErr="Chýba kľúč.";renderK();return}
+      kBusy=true;kErr="";renderK();
+      document.getElementById("kUrl").value=url;document.getElementById("kTok").value=tok;
+      kApi({action:"info"},{url:url,token:tok}).then(function(d){
+        kName=d.name||"";kBusy=false;
+        return setDoc(kRef,{cal:{url:url,token:tok}},{merge:true}).then(function(){toast("Kalendár „"+(d.name||"")+"“ je prepojený")});
+      }).catch(function(e){kBusy=false;kErr=e.message||String(e);renderK();
+        var u=document.getElementById("kUrl"),k=document.getElementById("kTok");if(u)u.value=url;if(k)k.value=tok;
+      });
+      return;
+    }
+    if(a==="kAddSave"){
+      var ti=document.getElementById("kaT").value.trim(),dt=document.getElementById("kaD").value,fr=document.getElementById("kaF").value,to=document.getElementById("kaE").value,no=document.getElementById("kaN").value.trim();
+      if(!ti||!dt){toast("Vyplň názov a dátum");return}
+      kBusy=true;t.disabled=true;t.textContent="Ukladám…";
+      kApi({action:"add",title:ti,date:dt,from:fr,to:to,allDay:!fr,desc:no}).then(function(){
+        kBusy=false;kAdd=false;kMonth=dt.slice(0,7);toast("Uložené do Google Kalendára");renderK(true);
+      }).catch(function(e){kBusy=false;t.disabled=false;t.textContent="Uložiť do kalendára";toast(e.message)});
+      return;
+    }
+    if(a==="kDel"){
+      if(!confirm("Zmazať udalosť „"+t.dataset.t+"“ z Google Kalendára?"))return;
+      t.disabled=true;
+      kApi({action:"del",id:t.dataset.id}).then(function(){toast("Udalosť zmazaná");renderK(true)}).catch(function(e){t.disabled=false;toast(e.message)});
+      return;
+    }
+  });
+  kBody.addEventListener("focusout",function(){setTimeout(function(){if(!kInField()&&location.hash==="#kalendar"&&!kAdd&&!kSetup)renderK()},300)});
 
   show();
   initAuth();

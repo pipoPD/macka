@@ -37,3 +37,6 @@ V appke je záložka **Záloha**: tlačidlo **Stiahnuť zálohu** uloží všetk
 
 ## Bezpečnosť
 Údaje (mená a telefónne čísla zákazníkov) sú dostupné iba prihláseným účtom z pravidiel v kroku 4. Heslá nikam neposielaj a pre každého zvoľ iné.
+
+## Google Kalendár firmy
+Sekcia **Kalendár** zobrazuje firemný Google Kalendár a vie doň pridávať a mazať udalosti. Prepojenie ide cez skript `google-apps-script/Kalendar.gs`, ktorý beží vo firemnom Google účte (postup je priamo v appke v sekcii Kalendár aj na začiatku skriptu). URL skriptu a kľúč sa ukladajú len do Firebase (`apps/nastavenia`), nie do kódu.
