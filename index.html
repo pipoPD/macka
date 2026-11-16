@@ -165,6 +165,15 @@ tfoot td{font-weight:700;border-bottom:0}
 .ksteps li{margin:4px 0}
 textarea{font:inherit;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%;min-height:64px;resize:vertical}
 details.card summary{cursor:pointer;font-weight:700}
+.cn-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.cn-h h3{margin:0}
+.cn-t td{vertical-align:top}
+.cn-p{font-weight:700;white-space:nowrap;color:var(--berry)}
+.cn-x{white-space:pre-line;margin-top:6px}
+.cn-item details{margin-top:8px}
+.cn-item summary{cursor:pointer;font-weight:700;color:var(--berry)}
+.cn-v{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
+.cn-v .vgrid{margin-top:4px}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){.tile{transition:none}}
 @media (min-width:560px){.tile{min-height:190px}}
@@ -276,19 +285,19 @@ details.card summary{cursor:pointer;font-weight:700}
   <section id="cennik-torty" hidden>
     <a class="back" href="#cennik">‹ Cenník</a>
     <h2>Torty</h2>
-    <div class="empty"><strong>Zatiaľ tu nič nie je.</strong>Tu pribudnú ceny tort.</div>
+    <div class="cn-body" data-cat="torty"></div>
   </section>
 
   <section id="cennik-kolace" hidden>
     <a class="back" href="#cennik">‹ Cenník</a>
     <h2>Koláče</h2>
-    <div class="empty"><strong>Zatiaľ tu nič nie je.</strong>Tu pribudnú ceny koláčov a dezertov.</div>
+    <div class="cn-body" data-cat="kolace"></div>
   </section>
 
   <section id="cennik-napoje" hidden>
     <a class="back" href="#cennik">‹ Cenník</a>
     <h2>Nápoje</h2>
-    <div class="empty"><strong>Zatiaľ tu nič nie je.</strong>Tu pribudnú ceny nápojov.</div>
+    <div class="cn-body" data-cat="napoje"></div>
   </section>
 
   <section id="vyplaty" hidden>
@@ -345,6 +354,7 @@ details.card summary{cursor:pointer;font-weight:700}
 </div>
 <script type="module">
 import {firebaseConfig} from "./firebase-config.js";
+import {CENNIK_WEB} from "./cennik-web.js";
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,collection,onSnapshot,setDoc,deleteDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
@@ -357,6 +367,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     ids.forEach(function(id){document.getElementById(id).hidden=(id!==t)});
     if(t==="vianoce")render();
     if(t==="vyplaty")renderV();
+    if(t.indexOf("cennik-")===0){cnEdit=null;renderC(t.slice(7))}
     if(t==="kalendar"){kForm=null;renderK(true)}else document.body.style.overflow="";
     window.scrollTo(0,0);
   }
@@ -439,12 +450,12 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       arr.sort(function(a,b){return (a.no||0)-(b.no||0)});
       S.orders=arr;gotOrders=true;refresh();
     },fail));
-    startV();startK();
+    startV();startK();startC();
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
     S={cakes:[],boxes:[],orders:[],pair:105};lastCfg="";lastOrders={};editId=null;
-    stopV();stopK();
+    stopV();stopK();stopC();
   }
   function initAuth(){
     var lg=document.getElementById("login"),msg=document.getElementById("loginMsg"),form=document.getElementById("loginForm");
@@ -637,6 +648,133 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(!pending)return;
     setTimeout(function(){if(inField())return;pending=false;render()},600);
   });
+  /* ---- Cenník ---- */
+  // Údaje: apps/cennik {src, torty:[...], kolace:[...], napoje:[...]}; prvé naplnenie z cennik-web.js (verejný web)
+  // Položka: {id,name,desc,valid,flav,note,vars:[{n,d,p,od,u,min}]}; u: ""=€, "ks"=€/ks, "+"=príplatok
+  var CN={src:"",torty:[],kolace:[],napoje:[]},cnGot=false,cnUn=null,cnEdit=null,cnDraft=null,cnSeeding=false,cnPending=false;
+  var cnRef=cfgOk?doc(db,"apps","cennik"):null;
+  function startC(){
+    if(cnUn||!cfgOk)return;
+    cnUn=onSnapshot(cnRef,function(snap){
+      if(!snap.exists()){
+        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser(Object.assign({napoje:[]},CENNIK_WEB)))).catch(fail)}
+        return;
+      }
+      var d=snap.data();
+      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[]};
+      cnGot=true;cnRefresh();
+    },fail);
+  }
+  function stopC(){if(cnUn)cnUn();cnUn=null;cnGot=false;cnEdit=null;cnDraft=null;CN={src:"",torty:[],kolace:[],napoje:[]}}
+  function cnSave(){setDoc(cnRef,JSON.parse(ser(CN))).catch(fail)}
+  function cnCat(){var h=(location.hash||"").replace("#","");return h.indexOf("cennik/")===0?h.slice(7):""}
+  function cnRefresh(){var c=cnCat();if(!c)return;if(cnEdit){cnPending=true;return}renderC(c)}
+  function cnEur(n){return Number(n).toLocaleString("sk-SK",{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+" €"}
+  function cnPrice(v){
+    if(typeof v.p!=="number")return v.p?esc(v.p):'<span class="small">cena neuvedená</span>';
+    return (v.u==="+"?"+ ":"")+(v.od?"od ":"")+cnEur(v.p)+(v.u==="ks"?"/ks":"");
+  }
+  function cnPlain(s){return String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")}
+  function cnItemView(it){
+    var h='<div class="card cn-item" data-id="'+esc(it.id)+'" data-s="'+esc(cnPlain([it.name,it.desc,it.flav,(it.vars||[]).map(function(v){return v.n+" "+v.d}).join(" ")].join(" ")))+'">';
+    h+='<div class="cn-h"><h3>'+esc(it.name||"Bez názvu")+'</h3><button class="x" data-act="cEdit" aria-label="Upraviť '+esc(it.name)+'">Upraviť</button></div>';
+    if(it.desc)h+='<div class="small">'+esc(it.desc)+'</div>';
+    if((it.vars||[]).length){
+      h+='<table class="cn-t"><tbody>';
+      it.vars.forEach(function(v){
+        h+='<tr><td>'+esc(v.n||"")+(v.d?'<div class="small">'+esc(v.d)+'</div>':'')+'</td><td class="r"><span class="cn-p">'+cnPrice(v)+'</span>'+(v.min?'<div class="small">min. '+v.min+' ks</div>':'')+'</td></tr>';
+      });
+      h+='</tbody></table>';
+    }
+    if(it.flav)h+='<details><summary>Príchute</summary><div class="small cn-x">'+esc(it.flav)+'</div></details>';
+    if(it.note)h+='<div class="small cn-x">'+esc(it.note)+'</div>';
+    if(it.valid)h+='<div class="small" style="margin-top:6px">Cenník platný od '+esc(it.valid)+', ceny s DPH.</div>';
+    return h+'</div>';
+  }
+  function cnEditView(it,isNew){
+    var h='<div class="card cn-item" data-id="'+esc(it.id)+'"><h3>'+(isNew?'Nová položka':'Upraviť položku')+'</h3><div class="vgrid">';
+    h+='<label class="full">Názov<input class="cf" data-k="name" value="'+esc(it.name||"")+'" placeholder="napr. Veterník"></label>';
+    h+='<label class="full">Popis<input class="cf" data-k="desc" value="'+esc(it.desc||"")+'" placeholder="napr. veľkosť, zloženie"></label>';
+    h+='<label>Platné od<input class="cf" data-k="valid" value="'+esc(it.valid||"")+'" placeholder="napr. 15. 1. 2026"></label></div>';
+    (it.vars||[]).forEach(function(v,i){
+      h+='<div class="cn-v" data-i="'+i+'"><div class="cn-h"><strong>Varianta '+(i+1)+'</strong><button class="x" data-act="cDelVar" aria-label="Odstrániť variantu">✕</button></div><div class="vgrid">';
+      h+='<label class="full">Názov varianty<input class="cv" data-k="n" value="'+esc(v.n||"")+'" placeholder="napr. Priemer 21 cm"></label>';
+      h+='<label class="full">Detail<input class="cv" data-k="d" value="'+esc(v.d||"")+'" placeholder="napr. 10–15 porcií"></label>';
+      h+='<label>Cena<input class="cv" data-k="p" inputmode="decimal" value="'+esc(typeof v.p==="number"?(v.p%1?v.p.toFixed(2):String(v.p)).replace(".",","):(v.p||""))+'" placeholder="číslo alebo text"></label>';
+      h+='<label>Jednotka<select class="cv" data-k="u"><option value=""'+(!v.u?' selected':'')+'>€ za celok</option><option value="ks"'+(v.u==="ks"?' selected':'')+'>€/ks</option><option value="+"'+(v.u==="+"?' selected':'')+'>príplatok</option></select></label>';
+      h+='<label>Min. odber (ks)<input class="cv" data-k="min" inputmode="numeric" value="'+(v.min||"")+'"></label>';
+      h+='<label class="chk"><input type="checkbox" class="cv" data-k="od"'+(v.od?' checked':'')+'> cena „od“</label></div></div>';
+    });
+    h+='<div class="form"><button class="btn" data-act="cAddVar" style="background:var(--lav);color:var(--tile-ink)">+ Varianta</button></div>';
+    h+='<div class="vgrid"><label class="full">Príchute<textarea class="cf" data-k="flav" placeholder="oddelené čiarkou">'+esc(it.flav||"")+'</textarea></label>';
+    h+='<label class="full">Poznámka<textarea class="cf" data-k="note">'+esc(it.note||"")+'</textarea></label></div>';
+    h+='<div class="form"><button class="btn" data-act="cSave">Uložiť</button><button class="x" data-act="cCancel">Zrušiť</button>';
+    if(!isNew)h+='<button class="x" data-act="cUp">↑ Vyššie</button><button class="x" data-act="cDel" style="margin-left:auto">Zmazať</button>';
+    return h+'</div></div>';
+  }
+  function cnRead(card){
+    var it=JSON.parse(JSON.stringify(cnDraft));
+    card.querySelectorAll(".cf").forEach(function(el){it[el.dataset.k]=el.value.trim()});
+    card.querySelectorAll(".cn-v").forEach(function(row){
+      var v=it.vars[+row.dataset.i]={};
+      row.querySelectorAll(".cv").forEach(function(el){
+        var k=el.dataset.k;
+        if(k==="od"){if(el.checked)v.od=true;return}
+        var x=el.value.trim();
+        if(k==="p"){var n=x.replace(/\s|€/g,"").replace(",",".");v.p=(x!==""&&/^\d+(\.\d+)?$/.test(n))?parseFloat(n):x;return}
+        if(k==="min"){var m=parseInt(x,10);if(m>0)v.min=m;return}
+        if(x||k==="u")v[k]=x;
+      });
+    });
+    return it;
+  }
+  function renderC(cat){
+    var box=document.querySelector('.cn-body[data-cat="'+cat+'"]');if(!box)return;
+    if(!cnGot){box.innerHTML='<div class="empty">Načítavam cenník…</div>';return}
+    var list=CN[cat]||[],h="";
+    if(list.length>3)h+='<div class="form"><input class="grow cn-q" type="search" placeholder="Hľadať v cenníku…" aria-label="Hľadať v cenníku"></div>';
+    if(!list.length&&!(cnEdit&&cnDraft))h+='<div class="empty"><strong>Zatiaľ tu nič nie je.</strong>Pridaj prvú položku tlačidlom nižšie.</div>';
+    list.forEach(function(it){h+=(cnEdit===it.id&&cnDraft)?cnEditView(cnDraft,false):cnItemView(it)});
+    if(cnEdit==="new"&&cnDraft)h+=cnEditView(cnDraft,true);
+    else h+='<div class="form" style="margin-top:16px"><button class="btn" data-act="cAdd">+ Pridať položku</button></div>';
+    var web=CENNIK_WEB[cat];
+    if(web&&web.length)h+='<details class="card"><summary>Údaje z webu</summary><div class="small" style="margin-top:6px">Ceny boli prevzaté z '+esc(CN.src||CENNIK_WEB.src)+'. Ak sa niečo pokazí, dajú sa vrátiť do pôvodného stavu (tvoje úpravy v tejto časti sa stratia).</div><div class="form"><button class="x" data-act="cReset">Obnoviť ceny z webu</button></div></details>';
+    box.innerHTML=h;
+    var ed=box.querySelector('.cn-item input.cf');if(ed&&cnEdit==="new"&&!ed.value)ed.focus();
+  }
+  document.querySelectorAll(".cn-body").forEach(function(box){
+    var cat=box.dataset.cat;
+    box.addEventListener("input",function(ev){
+      if(!ev.target.classList.contains("cn-q"))return;
+      var q=cnPlain(ev.target.value.trim());
+      box.querySelectorAll(".cn-item[data-s]").forEach(function(c){c.hidden=!!q&&c.dataset.s.indexOf(q)<0});
+    });
+    box.addEventListener("click",function(ev){
+      var t=ev.target.closest("button");if(!t||!t.dataset.act)return;
+      var a=t.dataset.act,card=t.closest(".cn-item"),id=card&&card.dataset.id,list=CN[cat];
+      function idx(){return list.findIndex(function(x){return x.id===id})}
+      function done(){cnEdit=null;cnDraft=null;cnPending=false;renderC(cat)}
+      if(a==="cEdit"){if(cnEdit)return toast("Najprv ulož alebo zruš rozpracovanú položku.");cnEdit=id;cnDraft=JSON.parse(JSON.stringify(list[idx()]));cnDraft.vars=cnDraft.vars||[];renderC(cat);return}
+      if(a==="cAdd"){if(cnEdit)return toast("Najprv ulož alebo zruš rozpracovanú položku.");cnEdit="new";cnDraft={id:uid(),name:"",desc:"",valid:"",flav:"",note:"",vars:[{n:"",d:"",p:"",u:"ks"}]};renderC(cat);return}
+      if(a==="cAddVar"){cnDraft=cnRead(card);cnDraft.vars.push({n:"",d:"",p:"",u:""});renderC(cat);return}
+      if(a==="cDelVar"){cnDraft=cnRead(card);cnDraft.vars.splice(+t.closest(".cn-v").dataset.i,1);renderC(cat);return}
+      if(a==="cCancel"){done();return}
+      if(a==="cSave"){
+        var it=cnRead(card);
+        if(!it.name)return toast("Zadaj názov položky.");
+        it.vars=it.vars.filter(function(v){return v.n||v.d||v.p!==""});
+        if(cnEdit==="new")list.push(it);else list[idx()]=it;
+        cnSave();done();toast("Uložené.");return;
+      }
+      if(a==="cUp"){var i=idx();if(i>0){var x=list[i];list[i]=list[i-1];list[i-1]=x;cnSave()}done();return}
+      if(a==="cDel"){if(!confirm("Naozaj zmazať položku „"+(list[idx()].name||"")+"“?"))return;list.splice(idx(),1);cnSave();done();return}
+      if(a==="cReset"){
+        if(!confirm("Obnoviť ceny v tejto časti z webu? Tvoje úpravy v nej sa stratia."))return;
+        CN[cat]=JSON.parse(JSON.stringify(CENNIK_WEB[cat]));CN.src=CENNIK_WEB.src;cnSave();done();toast("Ceny obnovené z webu.");return;
+      }
+    });
+  });
+
   /* ---- Výplaty ---- */
   // Údaje: apps/vyplaty {people:[...]}, apps/vyplaty/months/{RRRR-MM} {entries:{osobaId:{...}}}
   var MN=["Január","Február","Marec","Apríl","Máj","Jún","Júl","August","September","Október","November","December"];
