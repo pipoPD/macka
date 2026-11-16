@@ -129,3 +129,47 @@ export var CENNIK_WEB = {
       ], flav: "", note: "Odber 22. 12. poobede alebo 23. 12. doobeda."}
   ]
 };
+
+// Nápoje: z nápojového lístka a jesenného menu (fotky od Petra, 16. 11. 2026).
+function n(name, p, d, u) { return {n: name, d: d || "", p: p, u: u || ""}; }
+CENNIK_WEB.srcNapoje = "nápojového lístka a jesenného menu, prepísané 16. 11. 2026";
+CENNIK_WEB.napoje = [
+  {id: "n-kava", name: "Káva", desc: "#mlsnacava", valid: "", vars: [
+    n("Espresso", 2.1, "8 g"), n("Double espresso", 2.8, "16 g"), n("Cappuccino", 2.7, "8 g"),
+    n("Latte macchiato", 2.8, "8 g"), n("Flat white", 4, "16 g"), n("Ľadové latte", 3.2, "16 g"),
+    n("Kakao", 1.5, "180 ml"), n("Pohár mlieka", 1, "180 ml"),
+    n("Mlieko do kávy", 0.2, "20 ml", "+"), n("Sirup", 1, "vanilka, karamel, kokos, sezónne", "+"),
+    n("Alternatíva mlieka", 0.5, "bezlaktózové, ovsené, kokosové, hrachové", "+")
+  ], flav: "", note: ""},
+  {id: "n-matcha", name: "Matcha", desc: "#obchodčarovňa", valid: "", vars: [
+    n("Matcha latte", 4.8, "280 ml, 1,5 g matcha, mlieko"), n("Matcha cappuccino", 4.5, "200 ml, 1,5 g matcha, mlieko"),
+    n("Matcha ľadová", 4.9, "350 ml, 3 g matcha, mlieko, ľad")
+  ], flav: "", note: ""},
+  {id: "n-caj", name: "Čaj", desc: "300 ml", valid: "", vars: [
+    n("Mätový čaj", 3.4, "7 g"), n("Zázvorový čaj", 3.4, ""), n("Zelený čaj", 3.4, "4 g"),
+    n("Bylinkový čaj", 3.4, "4 g"), n("Ovocný čaj", 3.4, "10 g"), n("Čierny čaj", 3.4, "4 g"),
+    n("Med", 0.6, "20 g", "+")
+  ], flav: "", note: "Citrón je súčasťou každého čaju."},
+  {id: "n-cokolada", name: "Horúca čokoláda", desc: "", valid: "", vars: [
+    n("Mliečna belgická čokoláda 35,5 %", 4, "60 g čokolády"), n("Šľahačka", 0.6, "", "+"), n("Mix čerstvého ovocia", 1.5, "", "+")
+  ], flav: "", note: ""},
+  {id: "n-limonady", name: "Limonády", desc: "#brown&co.syrups", valid: "", vars: [
+    n("Citronáda", 1.5, "400 ml"), n("Minerálka rozlievaná", 0.8, "200 ml"), n("Baza & citrón", 4, "400 ml"),
+    n("Podľa sezónnej ponuky", "podľa ponuky", "")
+  ], flav: "", note: "Všetky limonády okrem citronády sú z minerálky."},
+  {id: "n-dzusy", name: "Džúsy a fľaškové nápoje", desc: "", valid: "", vars: [
+    n("100 % džús", 2.3, "250 ml"), n("Fľaškové nápoje", "podľa ponuky", "")
+  ], flav: "", note: "Príchute džúsov a fľaškové nápoje sa menia (lokálni dodávatelia)."},
+  {id: "n-jesen", name: "Jesenné nápoje", desc: "Sezónna ponuka", valid: "", vars: [
+    n("Pumpkin spice latte so šľahačkou", 5.5, "tekvicové pyré, sirup, škorica, káva, mlieko, šľahačka"),
+    n("Pumpkin spice latte bez šľahačky", 5, "tekvicové pyré, sirup, škorica, káva, mlieko"),
+    n("Chai latte", 4.3, "korenie, sirup, mlieko, škorica, čierny čaj"),
+    n("Dirty chai latte", 4.3, "korenie, mlieko, škorica, káva"),
+    n("Ube milk", 4, "sirup, mlieko; aj pre deti"),
+    n("Ube cappuccino", 4.9, "sirup, mlieko, káva"),
+    n("Pumpkin cloud matcha", 5.6, "matcha, sirup, smotana, tekvicové pyré, škorica"),
+    n("Matcha škorica latte", 4.9, "matcha, sirup, škorica, mlieko"),
+    n("Zázvor kurkuma", 4, "zázvor, sirup, citrón, mäta, voda"),
+    n("Jablko škorica", 4.5, "jablkové pyré, sirup, škorica, voda")
+  ], flav: "", note: ""}
+];

@@ -657,11 +657,12 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(cnUn||!cfgOk)return;
     cnUn=onSnapshot(cnRef,function(snap){
       if(!snap.exists()){
-        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser(Object.assign({napoje:[]},CENNIK_WEB)))).catch(fail)}
+        if(!snap.metadata.fromCache&&!cnSeeding){cnSeeding=true;setDoc(cnRef,JSON.parse(ser({src:CENNIK_WEB.src,torty:CENNIK_WEB.torty,kolace:CENNIK_WEB.kolace,napoje:CENNIK_WEB.napoje,napSeed:1}))).catch(fail)}
         return;
       }
       var d=snap.data();
-      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[]};
+      CN={src:d.src||"",torty:d.torty||[],kolace:d.kolace||[],napoje:d.napoje||[],napSeed:d.napSeed||0};
+      if(!CN.napSeed&&!CN.napoje.length){CN.napoje=JSON.parse(JSON.stringify(CENNIK_WEB.napoje));CN.napSeed=1;cnSave()}
       cnGot=true;cnRefresh();
     },fail);
   }
@@ -669,7 +670,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function cnSave(){setDoc(cnRef,JSON.parse(ser(CN))).catch(fail)}
   function cnCat(){var h=(location.hash||"").replace("#","");return h.indexOf("cennik/")===0?h.slice(7):""}
   function cnRefresh(){var c=cnCat();if(!c)return;if(cnEdit){cnPending=true;return}renderC(c)}
-  function cnEur(n){return Number(n).toLocaleString("sk-SK",{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+" €"}
+  function cnEur(n){return Number(n).toLocaleString("sk-SK",{minimumFractionDigits:(n%1||n<10)?2:0,maximumFractionDigits:2})+" €"}
   function cnPrice(v){
     if(typeof v.p!=="number")return v.p?esc(v.p):'<span class="small">cena neuvedená</span>';
     return (v.u==="+"?"+ ":"")+(v.od?"od ":"")+cnEur(v.p)+(v.u==="ks"?"/ks":"");
@@ -738,7 +739,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(cnEdit==="new"&&cnDraft)h+=cnEditView(cnDraft,true);
     else h+='<div class="form" style="margin-top:16px"><button class="btn" data-act="cAdd">+ Pridať položku</button></div>';
     var web=CENNIK_WEB[cat];
-    if(web&&web.length)h+='<details class="card"><summary>Údaje z webu</summary><div class="small" style="margin-top:6px">Ceny boli prevzaté z '+esc(CN.src||CENNIK_WEB.src)+'. Ak sa niečo pokazí, dajú sa vrátiť do pôvodného stavu (tvoje úpravy v tejto časti sa stratia).</div><div class="form"><button class="x" data-act="cReset">Obnoviť ceny z webu</button></div></details>';
+    if(web&&web.length)h+='<details class="card"><summary>Pôvodné údaje</summary><div class="small" style="margin-top:6px">Ceny boli prevzaté z '+esc(cat==="napoje"?CENNIK_WEB.srcNapoje:(CN.src||CENNIK_WEB.src))+'. Ak sa niečo pokazí, dajú sa vrátiť do pôvodného stavu (tvoje úpravy v tejto časti sa stratia).</div><div class="form"><button class="x" data-act="cReset">Obnoviť pôvodné ceny</button></div></details>';
     box.innerHTML=h;
     var ed=box.querySelector('.cn-item input.cf');if(ed&&cnEdit==="new"&&!ed.value)ed.focus();
   }
@@ -769,8 +770,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(a==="cUp"){var i=idx();if(i>0){var x=list[i];list[i]=list[i-1];list[i-1]=x;cnSave()}done();return}
       if(a==="cDel"){if(!confirm("Naozaj zmazať položku „"+(list[idx()].name||"")+"“?"))return;list.splice(idx(),1);cnSave();done();return}
       if(a==="cReset"){
-        if(!confirm("Obnoviť ceny v tejto časti z webu? Tvoje úpravy v nej sa stratia."))return;
-        CN[cat]=JSON.parse(JSON.stringify(CENNIK_WEB[cat]));CN.src=CENNIK_WEB.src;cnSave();done();toast("Ceny obnovené z webu.");return;
+        if(!confirm("Obnoviť pôvodné ceny v tejto časti? Tvoje úpravy v nej sa stratia."))return;
+        CN[cat]=JSON.parse(JSON.stringify(CENNIK_WEB[cat]));if(cat!=="napoje")CN.src=CENNIK_WEB.src;cnSave();done();toast("Pôvodné ceny obnovené.");return;
       }
     });
   });
