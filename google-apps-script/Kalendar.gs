@@ -16,6 +16,9 @@
  *       Kto má prístup: Ktokoľvek (Anyone)
  *     → Nasadiť → skopíruj URL webovej aplikácie (končí na /exec).
  *  5. V appke Macka. → Kalendár vlož URL a KĽÚČ → Uložiť.
+ *
+ * Po zmene tohto kódu: vlož nový kód, ulož, potom Nasadiť → Spravovať nasadenia
+ * → ceruzka (Upraviť) → Verzia: Nová verzia → Nasadiť. URL zostane rovnaká.
  */
 
 // Prázdne = hlavný kalendár firemného účtu. Iný kalendár: vlož jeho ID
@@ -101,6 +104,28 @@ function handle_(p) {
         x = c.createEvent(title, st, en, opt);
       }
       return out_({ ok: true, id: x.getId() });
+    }
+
+    if (p.action === 'edit') {
+      var ev3 = c.getEventById(p.id);
+      if (!ev3) return out_({ ok: false, error: 'udalost sa nenasla' });
+      if (ev3.isRecurringEvent()) return out_({ ok: false, error: 'opakovanu udalost uprav v Google Kalendari' });
+      var nt = String(p.title || '').trim();
+      if (!nt) return out_({ ok: false, error: 'chyba nazov' });
+      ev3.setTitle(nt);
+      ev3.setDescription(p.desc || '');
+      ev3.setLocation(p.loc || '');
+      if (p.date) {
+        if (p.allDay || !p.from) {
+          ev3.setAllDayDate(d_(p.date));
+        } else {
+          var st3 = d_(p.date + ' ' + p.from);
+          var en3 = p.to ? d_(p.date + ' ' + p.to) : new Date(st3.getTime() + 60 * 60 * 1000);
+          if (en3 <= st3) en3 = new Date(st3.getTime() + 60 * 60 * 1000);
+          ev3.setTime(st3, en3);
+        }
+      }
+      return out_({ ok: true, id: ev3.getId() });
     }
 
     if (p.action === 'del') {
