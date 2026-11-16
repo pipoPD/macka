@@ -156,6 +156,12 @@ function handle_(p) {
     if (p.action === 'mail_list') return out_(mailList_(p, tz));
     if (p.action === 'mail_get') return out_(mailGet_(p, tz));
     if (p.action === 'mail_reply') return out_(mailReply_(p));
+    if (p.action === 'mail_trash') {
+      var ids = [].concat(p.ids || p.id || []), th = [];
+      ids.forEach(function (id) { var x = GmailApp.getThreadById(id); if (x) th.push(x); });
+      for (var i = 0; i < th.length; i += 100) GmailApp.moveThreadsToTrash(th.slice(i, i + 100));
+      return out_({ ok: true, n: th.length });
+    }
     if (p.action === 'mail_read') {
       var th0 = GmailApp.getThreadById(p.id);
       if (!th0) return out_({ ok: false, error: 'email sa nenasiel' });
