@@ -37,8 +37,3 @@ V appke je záložka **Záloha**: tlačidlo **Stiahnuť zálohu** uloží všetk
 
 ## Bezpečnosť
 Údaje (mená a telefónne čísla zákazníkov) sú dostupné iba prihláseným účtom z pravidiel v kroku 4. Heslá nikam neposielaj a pre každého zvoľ iné.
-
-## Google Kalendár firmy
-Sekcia **Kalendár** zobrazuje firemný Google Kalendár a vie doň pridávať a mazať udalosti. Prepojenie ide cez skript `google-apps-script/Kalendar.gs`, ktorý beží vo firemnom Google účte (postup je priamo v appke v sekcii Kalendár aj na začiatku skriptu). URL skriptu a kľúč sa ukladajú len do Firebase (`apps/nastavenia`), nie do kódu.
-
-Sekcia **Správy** zobrazuje e-maily firemného Gmailu cez ten istý skript (akcie `mail_list`, `mail_get`, `mail_reply`, `mail_read`): zoznam (Doručené, Odoslané, Hľadať), čítanie vlákna, odpoveď a tlačidlo **+ Do kalendára**, ktoré otvorí formulár novej udalosti s predvyplneným menom, dátumom, časom a telefónom z e-mailu. E-maily z firemnej adresy na doméne sa do Gmailu dostanú preposielaním kópie u poskytovateľa schránky. Adresa firmy (Reply-To) a meno odosielateľa sú len vo Firebase (`apps/nastavenia` → `mail`).
