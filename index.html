@@ -96,6 +96,22 @@ td.r,th.r{text-align:right}
 #loginForm{display:flex;flex-direction:column;gap:10px;margin-top:16px}
 #loginForm input{width:100%}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;max-width:90%;z-index:60;font-weight:600}
+.vgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;margin-top:8px}
+.vgrid label{display:flex;flex-direction:column;gap:3px;font-size:.82rem;font-weight:600;color:var(--muted)}
+.vgrid label.chk{flex-direction:row;align-items:center;gap:8px}
+.vgrid input,.vgrid select{width:100%}
+.vgrid label.chk input{width:auto}
+.vgrid .full{grid-column:1/-1}
+@media (min-width:560px){.vgrid{grid-template-columns:repeat(3,1fr)}}
+.vtot{font-family:"Fraunces",Georgia,serif;font-size:1.4rem;color:var(--berry)}
+.mbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
+.mbar h3{margin:0;font-size:1.3rem;text-align:center;flex:1}
+.mbar .x{font-size:1.4rem;padding:6px 14px}
+.scroll{overflow-x:auto;margin:0 -6px}
+.scroll table{min-width:520px}
+.scroll th,.scroll td{white-space:nowrap}
+tfoot td{font-weight:700;border-bottom:0}
+.linkbtn{font:inherit;font-weight:700;border:0;background:transparent;color:var(--berry);cursor:pointer;padding:0}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){.tile{transition:none}}
 @media (min-width:560px){.tile{min-height:190px}}
@@ -225,7 +241,13 @@ td.r,th.r{text-align:right}
   <section id="vyplaty" hidden>
     <a class="back" href="#">‹ Späť</a>
     <h2>Výplaty</h2>
-    <div class="empty"><strong>Zatiaľ tu nič nie je.</strong>Tu pribudnú hodiny, prémie, dovolenky a výpočet výplat.</div>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-vtab="month">Mesiac</button>
+      <button role="tab" data-vtab="year">Prehľad</button>
+      <button role="tab" data-vtab="people">Ľudia</button>
+      <button role="tab" data-vtab="backup">Záloha</button>
+    </div>
+    <div id="vy-body"></div>
   </section>
 
   <section id="naklady" hidden>
@@ -281,6 +303,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var t=routes[h]||"home";
     ids.forEach(function(id){document.getElementById(id).hidden=(id!==t)});
     if(t==="vianoce")render();
+    if(t==="vyplaty")renderV();
     window.scrollTo(0,0);
   }
   window.addEventListener("hashchange",show);
@@ -362,10 +385,12 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       arr.sort(function(a,b){return (a.no||0)-(b.no||0)});
       S.orders=arr;gotOrders=true;refresh();
     },fail));
+    startV();
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
     S={cakes:[],boxes:[],orders:[],pair:105};lastCfg="";lastOrders={};editId=null;
+    stopV();
   }
   function initAuth(){
     var lg=document.getElementById("login"),msg=document.getElementById("loginMsg"),form=document.getElementById("loginForm");
@@ -558,6 +583,272 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(!pending)return;
     setTimeout(function(){if(inField())return;pending=false;render()},600);
   });
+  /* ---- Výplaty ---- */
+  // Údaje: apps/vyplaty {people:[...]}, apps/vyplaty/months/{RRRR-MM} {entries:{osobaId:{...}}}
+  var MN=["Január","Február","Marec","Apríl","Máj","Jún","Júl","August","September","Október","November","December"];
+  var VF=[
+    {k:"days",l:"Odpracované dni"},
+    {k:"hours",l:"Odpracované hodiny"},
+    {k:"sundays",l:"Nedele (−strava)",need:"sun"},
+    {k:"wkd",l:"Víkend (hod)"},
+    {k:"hol",l:"Sviatok (hod)"},
+    {k:"vac",l:"Dovolenka (hod)",emp:1},
+    {k:"par",l:"Paragraf (hod)",emp:1},
+    {k:"rew",l:"Odmeny (€)"},
+    {k:"candy",l:"Candy Bar (€)"},
+    {k:"extra",l:"Iné (€)"}
+  ];
+  var VT="month",VS={people:[],months:{}},vGotCfg=false,vGotMonths=false,vUnsubs=[],vStarted=false,vPending=false;
+  var vDirty={},vTimer=null,vCfgDirty=false,vCfgTimer=null;
+  var vMonth=(function(){var d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")})();
+  var vYear=String(new Date().getFullYear());
+  var vCfgRef,vMonthsCol;
+  if(cfgOk){vCfgRef=doc(db,"apps","vyplaty");vMonthsCol=collection(db,"apps","vyplaty","months")}
+  var vBody=document.getElementById("vy-body");
+
+  function vReady(){return vGotCfg&&vGotMonths}
+  function vInField(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#vy-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName))}
+  function vRefresh(){
+    if(location.hash!=="#vyplaty")return;
+    if(vInField()){vPending=true;return}
+    renderV();
+  }
+  function startV(){
+    if(vStarted||!cfgOk)return;vStarted=true;
+    vUnsubs.push(onSnapshot(vCfgRef,function(snap){
+      if(!vCfgDirty)VS.people=snap.exists()?(snap.data().people||[]):[];
+      vGotCfg=true;vRefresh();
+    },fail));
+    vUnsubs.push(onSnapshot(vMonthsCol,function(snap){
+      var o={};snap.forEach(function(d){o[d.id]=d.data()});
+      Object.keys(vDirty).forEach(function(k){if(VS.months[k])o[k]=VS.months[k]});
+      VS.months=o;vGotMonths=true;vRefresh();
+    },fail));
+  }
+  function stopV(){
+    vFlush();vSaveCfgNow();
+    vUnsubs.forEach(function(u){u()});vUnsubs=[];vStarted=false;vGotCfg=false;vGotMonths=false;
+    VS={people:[],months:{}};
+  }
+  function vQueue(ym){vDirty[ym]=true;clearTimeout(vTimer);vTimer=setTimeout(vFlush,700)}
+  function vFlush(){
+    clearTimeout(vTimer);
+    Object.keys(vDirty).forEach(function(ym){
+      delete vDirty[ym];
+      if(VS.months[ym])setDoc(doc(vMonthsCol,ym),JSON.parse(ser(VS.months[ym]))).catch(fail);
+    });
+  }
+  function vSaveCfg(){vCfgDirty=true;clearTimeout(vCfgTimer);vCfgTimer=setTimeout(vSaveCfgNow,700)}
+  function vSaveCfgNow(){
+    clearTimeout(vCfgTimer);if(!vCfgDirty)return;vCfgDirty=false;
+    setDoc(vCfgRef,JSON.parse(ser({people:VS.people}))).catch(fail);
+  }
+
+  function eur0(n){return Number(n).toLocaleString("sk-SK",{maximumFractionDigits:2})+" €"}
+  function nv(v){return v===undefined||v===null||v===""?"":String(v).replace(".",",")}
+  function ymLabel(ym){var p=ym.split("-");return MN[+p[1]-1]+" "+p[0]}
+  function ymAdd(ym,d){var p=ym.split("-"),y=+p[0],m=+p[1]-1+d;y+=Math.floor(m/12);m=((m%12)+12)%12;return y+"-"+String(m+1).padStart(2,"0")}
+  function vPerson(id){return VS.people.filter(function(p){return p.id===id})[0]}
+  function vEntries(ym){var m=VS.months[ym];return (m&&m.entries)||{}}
+  function vRates(p){return {rate:num(p.rate),meal:num(p.meal),sun:num(p.sun),wkd:p.wkd===""||p.wkd==null?num(p.rate):num(p.wkd)}}
+  function vHas(e){return !!e&&VF.some(function(f){return num(e[f.k])!==0})}
+  function vCalc(p,e){
+    var R=e.rt||vRates(p);
+    var c={work:num(e.hours)*R.rate,meal:num(e.days)*R.meal-num(e.sundays)*R.sun,wkd:num(e.wkd)*R.wkd,hol:num(e.hol)*R.rate,vac:num(e.vac)*R.rate,par:num(e.par)*R.rate,rew:num(e.rew),candy:num(e.candy),extra:num(e.extra)};
+    var s=0;Object.keys(c).forEach(function(k){s+=c[k]});
+    c.sum=Math.round(s*100)/100;c.total=Math.round(c.sum);return c;
+  }
+  function vTotal(p,e){
+    if(!e)return null;
+    if(vHas(e))return vCalc(p||{},e).total;
+    if(e.fixed!=null)return num(e.fixed);
+    return null;
+  }
+  function vPeopleIn(ym){var en=vEntries(ym);return VS.people.filter(function(p){return p.active!==false||vHas(en[p.id])||(en[p.id]&&en[p.id].fixed!=null)})}
+  function vMonthSum(ym){var en=vEntries(ym),s=0;VS.people.forEach(function(p){var t=vTotal(p,en[p.id]);if(t)s+=t});return s}
+  function vBreak(p,e){
+    if(!vHas(e))return e&&e.fixed!=null?"Suma prevzatá z tabuľky (bez rozpisu).":"";
+    var c=vCalc(p,e),L=[["Hodiny",c.work],["Strava",c.meal],["Víkend",c.wkd],["Sviatok",c.hol],["Dovolenka",c.vac],["Paragraf",c.par],["Odmeny",c.rew],["Candy Bar",c.candy],["Iné",c.extra]];
+    var out=L.filter(function(x){return x[1]}).map(function(x){return x[0]+" "+eur0(x[1])}).join(" · ");
+    if(c.sum!==c.total)out+=" · spolu "+eur0(c.sum)+", zaokrúhlené";
+    return out;
+  }
+  function vRateNote(p,e){
+    var R=(e&&e.rt)||vRates(p);
+    var s=eur0(R.rate)+"/hod · strava "+eur0(R.meal)+"/deň";
+    if(R.sun)s+=" · nedeľa −"+eur0(R.sun);
+    if(R.wkd!==R.rate)s+=" · víkend "+eur0(R.wkd)+"/hod";
+    return s;
+  }
+
+  function vMonthView(){
+    var en=vEntries(vMonth),ps=vPeopleIn(vMonth);
+    var h='<div class="card"><div class="mbar"><button class="x" data-act="vPrev" aria-label="Predchádzajúci mesiac">‹</button><h3>'+ymLabel(vMonth)+'</h3><button class="x" data-act="vNext" aria-label="Ďalší mesiac">›</button></div><div class="line" style="border:0;margin-top:6px"><span>Výplaty spolu</span><strong class="vtot" id="vMonthSum">'+eur0(vMonthSum(vMonth))+'</strong></div></div>';
+    if(!VS.people.length)return h+'<div class="empty"><strong>Zatiaľ tu nie sú žiadni ľudia.</strong>Pridaj ich v záložke Ľudia alebo nahraj údaje v záložke Záloha.</div>';
+    ps.forEach(function(p){
+      var e=en[p.id]||{},t=vTotal(p,e);
+      h+='<div class="card" data-p="'+p.id+'"><div class="line" style="border:0"><h3>'+esc(p.name)+(p.type==="brig"?' <span class="small">brigádnik</span>':'')+'</h3><strong class="vtot vt">'+(t==null?"—":eur0(t))+'</strong></div><div class="vgrid">';
+      VF.forEach(function(f){
+        if(f.emp&&p.type==="brig"&&!num(e[f.k]))return;
+        if(f.need&&!num(p[f.need])&&!(e.rt&&e.rt[f.need])&&!num(e[f.k]))return;
+        h+='<label>'+f.l+'<input class="vin" data-k="'+f.k+'" inputmode="decimal" value="'+nv(e[f.k])+'"></label>';
+      });
+      h+='<label class="full">Poznámka<input class="vin" data-k="note" value="'+esc(e.note||"")+'" placeholder="napr. za čo je suma Iné"></label></div>';
+      h+='<div class="small vb" style="margin-top:8px">'+esc(vBreak(p,e))+'</div>';
+      var bal=[];if(p.type!=="brig"){if(p.dov)bal.push("Dovolenka: "+esc(p.dov));if(p.par)bal.push("Paragraf: "+esc(p.par))}
+      h+='<div class="small">Sadzby: '+vRateNote(p,e)+(e.rt&&ser(e.rt)!==ser(vRates(p))?' <button class="linkbtn" data-act="vRerate">použiť aktuálne</button>':'')+'</div>';
+      if(bal.length)h+='<div class="small">Zostatok · '+bal.join(" · ")+'</div>';
+      h+='</div>';
+    });
+    return h;
+  }
+  function vYears(){var s={};s[String(new Date().getFullYear())]=1;Object.keys(VS.months).forEach(function(k){s[k.slice(0,4)]=1});return Object.keys(s).sort()}
+  function vYearView(){
+    var ys=vYears();if(ys.indexOf(vYear)<0)vYear=ys[ys.length-1];
+    var h='<div class="card"><div class="form" style="margin-top:0;align-items:center"><span>Rok</span><select id="vYearSel">';
+    ys.forEach(function(y){h+='<option'+(y===vYear?' selected':'')+'>'+y+'</option>'});
+    h+='</select></div>';
+    var cols=VS.people.filter(function(p){
+      if(p.active!==false)return true;
+      for(var m=1;m<=12;m++){var e=vEntries(vYear+"-"+String(m).padStart(2,"0"))[p.id];if(vTotal(p,e))return true}
+      return false;
+    });
+    if(!cols.length)return h+'<div class="small">Zatiaľ nie sú žiadne údaje.</div></div>';
+    var colSum={},grand=0;
+    h+='<div class="scroll"><table><thead><tr><th>Mesiac</th>';
+    cols.forEach(function(p){h+='<th class="r">'+esc(p.name)+'</th>';colSum[p.id]=0});
+    h+='<th class="r">Spolu</th></tr></thead><tbody>';
+    for(var m=1;m<=12;m++){
+      var ym=vYear+"-"+String(m).padStart(2,"0"),en=vEntries(ym),row=0,any=false,cells='';
+      cols.forEach(function(p){var t=vTotal(p,en[p.id]);if(t){row+=t;colSum[p.id]+=t;any=true}cells+='<td class="r">'+(t?eur0(t):'')+'</td>'});
+      grand+=row;
+      h+='<tr><td><button class="linkbtn" data-act="vGoto" data-ym="'+ym+'">'+MN[m-1]+'</button></td>'+cells+'<td class="r"><strong>'+(any?eur0(row):'')+'</strong></td></tr>';
+    }
+    h+='</tbody><tfoot><tr><td>Spolu</td>';
+    cols.forEach(function(p){h+='<td class="r">'+eur0(colSum[p.id])+'</td>'});
+    h+='<td class="r">'+eur0(grand)+'</td></tr></tfoot></table></div></div>';
+    return h;
+  }
+  function vPeopleView(){
+    var h='<div class="card"><h3>Pridať osobu</h3><div class="form"><input class="grow" id="vNewName" placeholder="Meno"><select id="vNewType"><option value="emp">Zamestnanec</option><option value="brig">Brigádnik</option></select><button class="btn" data-act="vAddP">Pridať</button></div></div>';
+    VS.people.forEach(function(p,i){
+      h+='<div class="card" data-p="'+p.id+'"><div class="line" style="border:0"><h3>'+esc(p.name)+(p.active===false?' <span class="small">skrytá</span>':'')+'</h3><span>'+(i?'<button class="x" data-act="vUp" aria-label="Posunúť vyššie">↑</button>':'')+'<button class="x" data-act="vDelP">Zmazať</button></span></div><div class="vgrid">';
+      h+='<label>Meno<input class="vpin" data-k="name" value="'+esc(p.name)+'"></label>';
+      h+='<label>Typ<select class="vpin" data-k="type"><option value="emp"'+(p.type!=="brig"?' selected':'')+'>Zamestnanec</option><option value="brig"'+(p.type==="brig"?' selected':'')+'>Brigádnik</option></select></label>';
+      h+='<label>Hodinovka (€)<input class="vpin" data-k="rate" data-n="1" inputmode="decimal" value="'+nv(p.rate)+'"></label>';
+      h+='<label>Strava na deň (€)<input class="vpin" data-k="meal" data-n="1" inputmode="decimal" value="'+nv(p.meal)+'"></label>';
+      h+='<label>Odpočet za nedeľu (€)<input class="vpin" data-k="sun" data-n="1" inputmode="decimal" value="'+nv(p.sun)+'" placeholder="0"></label>';
+      h+='<label>Víkend €/hod<input class="vpin" data-k="wkd" data-n="1" inputmode="decimal" value="'+nv(p.wkd)+'" placeholder="ako hodinovka"></label>';
+      if(p.type!=="brig"){
+        h+='<label>Zostatok dovolenky<input class="vpin" data-k="dov" value="'+esc(p.dov||"")+'" placeholder="napr. 8 dní"></label>';
+        h+='<label>Zostatok paragrafu<input class="vpin" data-k="par" value="'+esc(p.par||"")+'" placeholder="napr. 22 hodín"></label>';
+      }
+      h+='<label class="chk full"><input type="checkbox" class="vpin" data-k="active"'+(p.active!==false?' checked':'')+'> Zobrazovať v mesiaci</label></div></div>';
+    });
+    h+='<div class="small" style="margin-top:12px">Zmena sadzieb platí pre mesiace, ktoré ešte nie sú vyplnené. Už vyplnený mesiac si sadzby pamätá, pri ňom ich vieš prepnúť tlačidlom „použiť aktuálne“.</div>';
+    return h;
+  }
+  function vBackupView(){
+    var last="";try{last=localStorage.getItem("mt_last_backup_v")||""}catch(e){}
+    var h='<div class="card"><h3>Záloha výplat</h3><div class="small">Stiahne ľudí a všetky mesiace do súboru.</div><div class="small" style="margin-top:8px">'+(last?'Posledná záloha na tomto zariadení: '+esc(last):'Na tomto zariadení si zálohu výplat ešte nestiahol.')+'</div><div class="form"><button class="btn" data-act="vBackup">Stiahnuť zálohu</button></div></div>';
+    h+='<div class="card"><h3>Nahrať zo súboru</h3><div class="small">Nahradí všetky údaje vo Výplatách obsahom súboru. Takto sa nahrávajú aj údaje prevzaté z Google Sheetu.</div><div class="form"><input type="file" id="vRestoreFile" accept="application/json,.json"></div></div>';
+    return h;
+  }
+  function renderV(){
+    document.querySelectorAll("#vyplaty .tabs button").forEach(function(b){b.setAttribute("aria-selected",b.dataset.vtab===VT)});
+    vBody.innerHTML=!vReady()?'<div class="empty">Načítavam údaje…</div>':VT==="month"?vMonthView():VT==="year"?vYearView():VT==="people"?vPeopleView():vBackupView();
+  }
+  function vEntry(pid){
+    var m=VS.months[vMonth]||(VS.months[vMonth]={entries:{}});
+    m.entries=m.entries||{};
+    var e=m.entries[pid]||(m.entries[pid]={});
+    if(!e.rt){var p=vPerson(pid);if(p)e.rt=vRates(p)}
+    return e;
+  }
+  document.getElementById("vyplaty").addEventListener("click",function(ev){
+    var t=ev.target.closest("button");if(!t)return;
+    if(t.dataset.vtab){vFlush();vSaveCfgNow();VT=t.dataset.vtab;renderV();return}
+    var a=t.dataset.act;if(!a||a.charAt(0)!=="v")return;
+    var card=t.closest("[data-p]"),pid=card&&card.dataset.p;
+    if(a==="vPrev"||a==="vNext"){vFlush();vMonth=ymAdd(vMonth,a==="vPrev"?-1:1);renderV();return}
+    if(a==="vGoto"){vMonth=t.dataset.ym;VT="month";renderV();window.scrollTo(0,0);return}
+    if(a==="vRerate"){var e=vEntry(pid);e.rt=vRates(vPerson(pid));vQueue(vMonth);renderV();return}
+    if(a==="vAddP"){
+      var n=document.getElementById("vNewName").value.trim();if(!n)return;
+      var brig=document.getElementById("vNewType").value==="brig";
+      VS.people.push({id:uid(),name:n,type:brig?"brig":"emp",rate:5,meal:4.5,sun:0,wkd:"",dov:"",par:"",active:true});
+      vSaveCfg();vSaveCfgNow();renderV();return;
+    }
+    if(a==="vUp"){var i=VS.people.findIndex(function(p){return p.id===pid});if(i>0){var x=VS.people[i];VS.people[i]=VS.people[i-1];VS.people[i-1]=x;vSaveCfg();vSaveCfgNow();renderV()}return}
+    if(a==="vDelP"){
+      var used=Object.keys(VS.months).some(function(k){var e=vEntries(k)[pid];return vHas(e)||(e&&e.fixed!=null)});
+      if(used){alert("Táto osoba má uložené výplaty, preto sa nedá zmazať. Ak ju už nechceš vidieť, odškrtni „Zobrazovať v mesiaci“.");return}
+      if(!confirm("Zmazať osobu?"))return;
+      VS.people=VS.people.filter(function(p){return p.id!==pid});vSaveCfg();vSaveCfgNow();renderV();return;
+    }
+    if(a==="vBackup"){
+      vFlush();
+      var d={app:"macka-vyplaty",exported:new Date().toISOString(),people:VS.people,months:VS.months};
+      var blob=new Blob([JSON.stringify(d,null,1)],{type:"application/json"});
+      var l=document.createElement("a");l.href=URL.createObjectURL(blob);
+      l.download="macka-vyplaty-zaloha-"+new Date().toISOString().slice(0,10)+".json";
+      document.body.appendChild(l);l.click();l.remove();setTimeout(function(){URL.revokeObjectURL(l.href)},2000);
+      try{localStorage.setItem("mt_last_backup_v",new Date().toLocaleString("sk-SK"))}catch(e){}
+      renderV();return;
+    }
+  });
+  vBody.addEventListener("input",function(ev){
+    var i=ev.target;if(!i.classList.contains("vin"))return;
+    var card=i.closest("[data-p]"),pid=card.dataset.p,p=vPerson(pid);if(!p)return;
+    var e=vEntry(pid),k=i.dataset.k,raw=i.value.trim();
+    if(k==="note"){if(raw)e.note=i.value;else delete e.note}
+    else if(raw==="")delete e[k];else e[k]=num(raw);
+    var t=vTotal(p,e);
+    card.querySelector(".vt").textContent=t==null?"—":eur0(t);
+    card.querySelector(".vb").textContent=vBreak(p,e);
+    var ms=document.getElementById("vMonthSum");if(ms)ms.textContent=eur0(vMonthSum(vMonth));
+    vQueue(vMonth);
+  });
+  vBody.addEventListener("change",function(ev){
+    var i=ev.target;
+    if(i.id==="vYearSel"){vYear=i.value;renderV();return}
+    if(i.id==="vRestoreFile"){
+      var f=i.files[0];if(!f)return;
+      var r=new FileReader();
+      r.onload=function(){
+        try{
+          var d=JSON.parse(r.result);
+          if(!d||d.app!=="macka-vyplaty"||!Array.isArray(d.people)||!d.months||typeof d.months!=="object")throw new Error("zlý súbor");
+          var keys=Object.keys(d.months).filter(function(k){return /^\d{4}-\d{2}$/.test(k)});
+          if(!confirm("Nahrať výplaty zo súboru? Aktuálne údaje vo Výplatách sa nahradia ("+d.people.length+" ľudí, "+keys.length+" mesiacov)."))return;
+          vDirty={};clearTimeout(vTimer);vCfgDirty=false;clearTimeout(vCfgTimer);
+          var wb=writeBatch(db);
+          wb.set(vCfgRef,JSON.parse(ser({people:d.people})));
+          keys.forEach(function(k){wb.set(doc(vMonthsCol,k),JSON.parse(ser(d.months[k])))});
+          Object.keys(VS.months).forEach(function(k){if(keys.indexOf(k)<0)wb.delete(doc(vMonthsCol,k))});
+          wb.commit().then(function(){toast("Výplaty nahrané")}).catch(fail);
+          VS.people=d.people;var nm={};keys.forEach(function(k){nm[k]=d.months[k]});VS.months=nm;
+          VT="month";renderV();
+        }catch(err){toast("Súbor sa nepodarilo načítať")}
+      };
+      r.readAsText(f);return;
+    }
+    if(i.classList.contains("vpin")){
+      var p=vPerson(i.closest("[data-p]").dataset.p);if(!p)return;
+      var k=i.dataset.k;
+      if(k==="active")p.active=i.checked;
+      else if(i.dataset.n)p[k]=i.value.trim()===""?"":num(i.value);
+      else p[k]=k==="name"?(i.value.trim()||p.name):i.value.trim();
+      vSaveCfg();
+      if(k==="type"||k==="active"||k==="name"){vSaveCfgNow();renderV()}
+    }
+  });
+  vBody.addEventListener("focusout",function(){
+    vFlush();vSaveCfgNow();
+    if(!vPending)return;
+    setTimeout(function(){if(vInField())return;vPending=false;renderV()},600);
+  });
+
   show();
   initAuth();
 })();
