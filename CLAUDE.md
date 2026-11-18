@@ -23,7 +23,8 @@
 - Prihlásenie e-mail + heslo, 2 účty. Firestore pravidlá povoľujú len tieto dva účty (cesta `apps/**`).
 - Dokumenty:
   - `apps/vianoce2026`: `{cakes, boxes, pair}`; objednávky v `apps/vianoce2026/orders/{id}`: `{no, name, contact, lines[{kind: box|mix|cake, id, qty, note}], price, note}`
-  - `apps/vyplaty`: `{people:[{id, name, type: emp|brig, rate, meal, sun, wkd, dov, par, active}]}`; mesiace v `apps/vyplaty/months/{RRRR-MM}`: `{entries:{osobaId:{days, hours, sundays, wkd, hol, vac, par, rew, candy, extra, note, rt:{rate,meal,sun,wkd}} alebo {fixed: suma}}}`
+  - `apps/vyplaty`: `{people:[{id, name, type: emp|brig, rate, meal, sun, wkd, dov, par, active, sheet, email}], gs:{url, token}}`; mesiace v `apps/vyplaty/months/{RRRR-MM}`: `{entries:{osobaId:{days, hours, sundays, wkd, hol, vac, par, rew, candy, extra, note, imported, sent, rt:{rate,meal,sun,wkd}} alebo {fixed: suma}}}`
+  - Dochádzka: Apps Script `google-apps-script/Dochadzka.gs` (priečinok „Mackine Torty“ na Drive, Sheet na osobu, hárky podľa mesiacov). `people.sheet` = názov Sheetu, `gs` = URL a kľúč skriptu (len vo Firebase). Načíta dni, hodiny, nedele, víkend, sviatok (zelená farba), dovolenku a paragraf (poznámka) a posiela výplatu e-mailom.
   - `apps/cennik`: `{src, napSeed, kolDel, torty:[…], kolace:[…], napoje:[…]}`; položka `{id, name, desc, valid, flav, note, vars:[{n, d, p, od, u, min}]}`
   - `apps/nastavenia`: staré, nepoužíva sa.
 - Zmeny v `cennik-web.js` sa do existujúcej databázy nepremietnu samé (treba jednorazovú úpravu s príznakom ako `napSeed`/`kolDel`, alebo úpravu v appke).

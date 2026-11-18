@@ -101,6 +101,12 @@ td.r,th.r{text-align:right}
 .vgrid input,.vgrid select{width:100%}
 .vgrid label.chk input{width:auto}
 .vgrid .full{grid-column:1/-1}
+.ksteps{margin:8px 0 0;padding-left:20px}
+.ksteps li{margin:4px 0}
+.vact{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.btn.sm{padding:7px 12px;font-size:.88rem}
+.btn.ghost{background:var(--surface);color:var(--berry);border:1px solid var(--line)}
+.btn:disabled{opacity:.6;cursor:default}
 @media (min-width:560px){.vgrid{grid-template-columns:repeat(3,1fr)}}
 .vtot{font-family:"Fraunces",Georgia,serif;font-size:1.4rem;color:var(--berry)}
 .mbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px}
@@ -724,8 +730,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     {k:"candy",l:"Candy Bar (€)"},
     {k:"extra",l:"Iné (€)"}
   ];
-  var VT="month",VS={people:[],months:{}},vGotCfg=false,vGotMonths=false,vUnsubs=[],vStarted=false,vPending=false;
-  var vDirty={},vTimer=null,vCfgDirty=false,vCfgTimer=null;
+  var VT="month",VS={people:[],months:{},gs:{url:"",token:""}},vGotCfg=false,vGotMonths=false,vUnsubs=[],vStarted=false,vPending=false;
+  var vDirty={},vTimer=null,vCfgDirty=false,vCfgTimer=null,vBusy={},vGsBusy=false,vGsErr="";
   var vMonth=(function(){var d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")})();
   var vYear=String(new Date().getFullYear());
   var vCfgRef,vMonthsCol;
@@ -742,7 +748,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function startV(){
     if(vStarted||!cfgOk)return;vStarted=true;
     vUnsubs.push(onSnapshot(vCfgRef,function(snap){
-      if(!vCfgDirty)VS.people=snap.exists()?(snap.data().people||[]):[];
+      if(!vCfgDirty){var cd=snap.exists()?snap.data():{};VS.people=cd.people||[];VS.gs={url:(cd.gs&&cd.gs.url)||"",token:(cd.gs&&cd.gs.token)||""}}
       vGotCfg=true;vRefresh();
     },fail));
     vUnsubs.push(onSnapshot(vMonthsCol,function(snap){
@@ -754,7 +760,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function stopV(){
     vFlush();vSaveCfgNow();
     vUnsubs.forEach(function(u){u()});vUnsubs=[];vStarted=false;vGotCfg=false;vGotMonths=false;
-    VS={people:[],months:{}};
+    VS={people:[],months:{},gs:{url:"",token:""}};vBusy={};
   }
   function vQueue(ym){vDirty[ym]=true;clearTimeout(vTimer);vTimer=setTimeout(vFlush,700)}
   function vFlush(){
@@ -767,7 +773,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function vSaveCfg(){vCfgDirty=true;clearTimeout(vCfgTimer);vCfgTimer=setTimeout(vSaveCfgNow,700)}
   function vSaveCfgNow(){
     clearTimeout(vCfgTimer);if(!vCfgDirty)return;vCfgDirty=false;
-    setDoc(vCfgRef,JSON.parse(ser({people:VS.people}))).catch(fail);
+    setDoc(vCfgRef,JSON.parse(ser({people:VS.people,gs:VS.gs}))).catch(fail);
   }
 
   function eur0(n){return Number(n).toLocaleString("sk-SK",{maximumFractionDigits:2})+" €"}
@@ -813,7 +819,14 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(!VS.people.length)return h+'<div class="empty"><strong>Zatiaľ tu nie sú žiadni ľudia.</strong>Pridaj ich v záložke Ľudia alebo nahraj údaje v záložke Záloha.</div>';
     ps.forEach(function(p){
       var e=en[p.id]||{},t=vTotal(p,e);
-      h+='<div class="card" data-p="'+p.id+'"><div class="line" style="border:0"><h3>'+esc(p.name)+(p.type==="brig"?' <span class="small">brigádnik</span>':'')+'</h3><strong class="vtot vt">'+(t==null?"—":eur0(t))+'</strong></div><div class="vgrid">';
+      h+='<div class="card" data-p="'+p.id+'"><div class="line" style="border:0"><h3>'+esc(p.name)+(p.type==="brig"?' <span class="small">brigádnik</span>':'')+'</h3><strong class="vtot vt">'+(t==null?"—":eur0(t))+'</strong></div>';
+      if(p.sheet){
+        var bz=vBusy[p.id];
+        h+='<div class="vact"><button class="btn sm" data-act="vLoad"'+(bz?' disabled':'')+'>'+(bz==="load"?'Načítavam…':'Načítať dáta')+'</button><button class="btn sm ghost" data-act="vMail"'+(bz?' disabled':'')+'>'+(bz==="mail"?'Posielam…':'Poslať e-mail')+'</button></div>';
+        var inf=[];if(e.imported)inf.push("Dochádzka načítaná "+esc(e.imported));if(e.sent)inf.push("E-mail poslaný "+esc(e.sent));
+        if(inf.length)h+='<div class="small">'+inf.join(" · ")+'</div>';
+      }
+      h+='<div class="vgrid">';
       VF.forEach(function(f){
         if(f.emp&&p.type==="brig"&&!num(e[f.k]))return;
         if(f.need&&!num(p[f.need])&&!(e.rt&&e.rt[f.need])&&!num(e[f.k]))return;
@@ -865,12 +878,15 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       h+='<label>Strava na deň (€)<input class="vpin" data-k="meal" data-n="1" inputmode="decimal" value="'+nv(p.meal)+'"></label>';
       h+='<label>Odpočet za nedeľu (€)<input class="vpin" data-k="sun" data-n="1" inputmode="decimal" value="'+nv(p.sun)+'" placeholder="0"></label>';
       h+='<label>Víkend €/hod<input class="vpin" data-k="wkd" data-n="1" inputmode="decimal" value="'+nv(p.wkd)+'" placeholder="ako hodinovka"></label>';
+      h+='<label>Súbor dochádzky<input class="vpin" data-k="sheet" value="'+esc(p.sheet||"")+'" placeholder="názov Sheetu"></label>';
+      h+='<label>E-mail<input class="vpin" data-k="email" type="email" value="'+esc(p.email||"")+'" autocomplete="off"></label>';
       if(p.type!=="brig"){
         h+='<label>Zostatok dovolenky<input class="vpin" data-k="dov" value="'+esc(p.dov||"")+'" placeholder="napr. 8 dní"></label>';
         h+='<label>Zostatok paragrafu<input class="vpin" data-k="par" value="'+esc(p.par||"")+'" placeholder="napr. 22 hodín"></label>';
       }
       h+='<label class="chk full"><input type="checkbox" class="vpin" data-k="active"'+(p.active!==false?' checked':'')+'> Zobrazovať v mesiaci</label></div></div>';
     });
+    h+=vGsView();
     h+='<div class="small" style="margin-top:12px">Zmena sadzieb platí pre mesiace, ktoré ešte nie sú vyplnené. Už vyplnený mesiac si sadzby pamätá, pri ňom ich vieš prepnúť tlačidlom „použiť aktuálne“.</div>';
     return h;
   }
@@ -880,12 +896,97 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     h+='<div class="card"><h3>Nahrať zo súboru</h3><div class="small">Nahradí všetky údaje vo Výplatách obsahom súboru. Takto sa nahrávajú aj údaje prevzaté z Google Sheetu.</div><div class="form"><input type="file" id="vRestoreFile" accept="application/json,.json"></div></div>';
     return h;
   }
+  // --- Google dochádzka (Apps Script google-apps-script/Dochadzka.gs) ---
+  function vGsOn(){return !!(VS.gs&&VS.gs.url&&VS.gs.token)}
+  function vGsView(){
+    var h='<div class="card" style="margin-top:12px"><h3>Google dochádzka</h3>';
+    h+='<div class="small">'+(vGsOn()?'Prepojené. Pri osobe vyplň „Súbor dochádzky“ (presný názov Sheetu v priečinku Mackine Torty) a „E-mail“.':'Dochádzka sa načíta cez malý skript v Google účte s priečinkom Mackine Torty. Stačí to urobiť raz, najlepšie na počítači.')+'</div>';
+    if(!vGsOn()){
+      h+='<ol class="ksteps small"><li>Otvor <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → Nový projekt</a>.</li>';
+      h+='<li>Vymaž, čo tam je, vlož kód skriptu (tlačidlo nižšie ho skopíruje) a ulož. Projekt pomenuj „Macka. Dochádzka“.</li>';
+      h+='<li>Hore vyber funkciu <strong>nastav</strong> → <strong>Spustiť</strong> → povoľ prístup. Dole v protokole sa zobrazí <strong>KĽÚČ</strong>.</li>';
+      h+='<li><strong>Nasadiť → Nové nasadenie</strong> → <strong>Webová aplikácia</strong>. Spustiť ako: <strong>Ja</strong>, Kto má prístup: <strong>Ktokoľvek</strong> → Nasadiť. Skopíruj <strong>URL</strong> (končí na /exec).</li>';
+      h+='<li>Sem vlož URL a kľúč a klikni Uložiť.</li></ol>';
+    }
+    h+='<div class="form"><button class="btn sm" data-act="vGsCopy">Kopírovať kód skriptu</button><a class="btn sm ghost" href="https://github.com/pipoPD/macka/blob/main/google-apps-script/Dochadzka.gs" target="_blank" rel="noopener">Zobraziť kód</a></div>';
+    h+='<div class="vgrid"><label class="full">URL skriptu<input id="vGsUrl" type="url" value="'+esc(VS.gs.url)+'" placeholder="https://script.google.com/…/exec" autocomplete="off"></label>';
+    h+='<label class="full">Kľúč<input id="vGsTok" type="text" value="'+esc(VS.gs.token)+'" autocomplete="off" spellcheck="false"></label></div>';
+    if(vGsErr)h+='<div class="small" style="color:var(--berry);margin-top:6px">'+esc(vGsErr)+'</div>';
+    h+='<div class="form"><button class="btn" data-act="vGsSave"'+(vGsBusy?' disabled':'')+'>'+(vGsBusy?'Overujem…':'Uložiť a overiť')+'</button></div></div>';
+    return h;
+  }
+  function vApi(body,cfg){
+    cfg=cfg||VS.gs;
+    var b={token:cfg.token};Object.keys(body).forEach(function(k){b[k]=body[k]});
+    return fetch(cfg.url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(b)})
+      .catch(function(){throw new Error(navigator.onLine===false?"Si offline.":"Nepodarilo sa spojiť so skriptom. Skontroluj URL a že prístup je „Ktokoľvek“.")})
+      .then(function(r){if(!r.ok)throw new Error("Skript vrátil chybu "+r.status+".");return r.json().catch(function(){throw new Error("Skript neodpovedal správne. Skontroluj URL (musí končiť na /exec) a nasadenie.")})})
+      .then(function(d){
+        if(d&&d.ok)return d;
+        var er=d&&d.error;
+        throw new Error(er==="kluc"?"Nesprávny kľúč.":er==="neznama akcia"?"Skript v Google účte je starý. Vlož doň nový kód a nasaď novú verziu.":(er||"Neznáma chyba skriptu."));
+      });
+  }
+  function vStamp(){return new Date().toLocaleString("sk-SK",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})}
+  function fN(n){return Number(n).toLocaleString("sk-SK",{maximumFractionDigits:2})}
+  var VLOADK=["days","hours","sundays","wkd","hol","vac","par"];
+  function vLoadP(pid){
+    var p=vPerson(pid);if(!p||vBusy[pid])return;
+    if(!vGsOn()){alert("Najprv nastav Google dochádzku (záložka Ľudia, dole).");return}
+    var ym=vMonth;
+    vFlush();vBusy[pid]="load";renderV();
+    vApi({action:"read",file:p.sheet,ym:ym}).then(function(d){
+      var e=vEntry(pid,ym);
+      VLOADK.forEach(function(k){var v=num(d[k]);if(v)e[k]=v;else delete e[k]});
+      e.imported=vStamp();
+      vQueue(ym);
+      var msg=p.name+": "+fN(d.days)+" dní, "+fN(d.hours)+" h";
+      if(d.vac)msg+=", dovolenka "+fN(d.vac)+" h";
+      if(d.par)msg+=", paragraf "+fN(d.par)+" h";
+      toast(msg);
+      var info=[];
+      if(d.holDays&&d.holDays.length)info.push("Sviatky (zelené dni): "+d.holDays.join(", ")+(d.hol?" – odpracované "+fN(d.hol)+" h":" – neodpracované"));
+      if(d.notes&&d.notes.length)info.push("Poznámky, ktoré appka nepoužila (skontroluj):\n"+d.notes.join("\n"));
+      if(info.length)alert(p.name+" – "+ymLabel(ym)+"\n\n"+info.join("\n\n"));
+    }).catch(function(err){alert("Dochádzku sa nepodarilo načítať.\n"+err.message)}).then(function(){
+      delete vBusy[pid];renderV();
+    });
+  }
+  function vMailText(p,e,ym){
+    var c=vCalc(p,e),R=e.rt||vRates(p),L=[];
+    if(num(e.hours))L.push("Odpracované: "+fN(num(e.days))+" dní, "+fN(num(e.hours))+" h × "+eur0(R.rate)+" = "+eur0(c.work));
+    if(c.meal)L.push("Strava: "+fN(num(e.days))+" dní"+(num(e.sundays)&&R.sun?" (z toho "+fN(num(e.sundays))+" nedieľ za "+eur0(R.meal-R.sun)+")":"")+" = "+eur0(c.meal));
+    if(c.wkd)L.push("Príplatok za víkend: "+fN(num(e.wkd))+" h × "+eur0(R.wkd)+" = "+eur0(c.wkd));
+    if(c.hol)L.push("Príplatok za sviatok: "+fN(num(e.hol))+" h × "+eur0(R.rate)+" = "+eur0(c.hol));
+    if(c.vac)L.push("Dovolenka: "+fN(num(e.vac))+" h × "+eur0(R.rate)+" = "+eur0(c.vac));
+    if(c.par)L.push("Paragraf: "+fN(num(e.par))+" h × "+eur0(R.rate)+" = "+eur0(c.par));
+    if(c.rew)L.push("Odmeny: "+eur0(c.rew));
+    if(c.candy)L.push("Candy Bar: "+eur0(c.candy));
+    if(c.extra)L.push("Iné: "+eur0(c.extra));
+    return "Ahoj "+p.name+",\n\nposielame Ti výplatu za "+ymLabel(ym).toLowerCase()+".\n\n"+L.join("\n")+"\n\nSpolu: "+eur0(c.total)+"\n\nĎakujeme,\nMacka.";
+  }
+  function vMailP(pid){
+    var p=vPerson(pid);if(!p||vBusy[pid])return;
+    if(!vGsOn()){alert("Najprv nastav Google dochádzku (záložka Ľudia, dole).");return}
+    if(!p.email){alert("Doplň e-mail osoby v záložke Ľudia.");return}
+    var ym=vMonth,e=vEntries(ym)[pid];
+    if(!vHas(e)){alert("Výplata za "+ymLabel(ym)+" ešte nie je vyplnená.");return}
+    var body=vMailText(p,e,ym),sub="Výplata – "+ymLabel(ym);
+    if(!confirm("Poslať e-mail na "+p.email+"?\n\n"+sub+"\n\n"+body))return;
+    vFlush();vBusy[pid]="mail";renderV();
+    vApi({action:"mail",to:p.email,subject:sub,body:body}).then(function(){
+      var en=vEntry(pid,ym);en.sent=vStamp();vQueue(ym);toast("E-mail poslaný: "+p.email);
+    }).catch(function(err){alert("E-mail sa nepodarilo poslať.\n"+err.message)}).then(function(){
+      delete vBusy[pid];renderV();
+    });
+  }
   function renderV(){
     document.querySelectorAll("#vyplaty .tabs button").forEach(function(b){b.setAttribute("aria-selected",b.dataset.vtab===VT)});
     vBody.innerHTML=!vReady()?'<div class="empty">Načítavam údaje…</div>':VT==="month"?vMonthView():VT==="year"?vYearView():VT==="people"?vPeopleView():vBackupView();
   }
-  function vEntry(pid){
-    var m=VS.months[vMonth]||(VS.months[vMonth]={entries:{}});
+  function vEntry(pid,ym){
+    ym=ym||vMonth;
+    var m=VS.months[ym]||(VS.months[ym]={entries:{}});
     m.entries=m.entries||{};
     var e=m.entries[pid]||(m.entries[pid]={});
     if(!e.rt){var p=vPerson(pid);if(p)e.rt=vRates(p)}
@@ -911,6 +1012,23 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(used){alert("Táto osoba má uložené výplaty, preto sa nedá zmazať. Ak ju už nechceš vidieť, odškrtni „Zobrazovať v mesiaci“.");return}
       if(!confirm("Zmazať osobu?"))return;
       VS.people=VS.people.filter(function(p){return p.id!==pid});vSaveCfg();vSaveCfgNow();renderV();return;
+    }
+    if(a==="vLoad"){vLoadP(pid);return}
+    if(a==="vMail"){vMailP(pid);return}
+    if(a==="vGsCopy"){
+      fetch("google-apps-script/Dochadzka.gs",{cache:"no-store"}).then(function(r){return r.text()}).then(function(tx){return navigator.clipboard.writeText(tx)}).then(function(){toast("Kód skriptu je skopírovaný")},function(){toast("Kopírovanie nefunguje, otvor kód cez „Zobraziť kód“")});
+      return;
+    }
+    if(a==="vGsSave"){
+      var gu=document.getElementById("vGsUrl").value.trim(),gt=document.getElementById("vGsTok").value.trim();
+      if(!gu&&!gt){VS.gs={url:"",token:""};vGsErr="";vSaveCfg();vSaveCfgNow();renderV();return}
+      if(!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(gu)){vGsErr="URL musí začínať https://script.google.com/ a končiť na /exec.";renderV();return}
+      if(!gt){vGsErr="Chýba kľúč.";renderV();return}
+      vGsBusy=true;vGsErr="";renderV();
+      vApi({action:"ping"},{url:gu,token:gt}).then(function(d){
+        VS.gs={url:gu,token:gt};vSaveCfg();vSaveCfgNow();toast("Prepojené – priečinok "+d.folder);
+      }).catch(function(err){vGsErr=err.message}).then(function(){vGsBusy=false;renderV()});
+      return;
     }
     if(a==="vBackup"){
       vFlush();
@@ -949,7 +1067,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
           if(!confirm("Nahrať výplaty zo súboru? Aktuálne údaje vo Výplatách sa nahradia ("+d.people.length+" ľudí, "+keys.length+" mesiacov)."))return;
           vDirty={};clearTimeout(vTimer);vCfgDirty=false;clearTimeout(vCfgTimer);
           var wb=writeBatch(db);
-          wb.set(vCfgRef,JSON.parse(ser({people:d.people})));
+          wb.set(vCfgRef,JSON.parse(ser({people:d.people,gs:VS.gs})));
           keys.forEach(function(k){wb.set(doc(vMonthsCol,k),JSON.parse(ser(d.months[k])))});
           Object.keys(VS.months).forEach(function(k){if(keys.indexOf(k)<0)wb.delete(doc(vMonthsCol,k))});
           wb.commit().then(function(){toast("Výplaty nahrané")}).catch(fail);
