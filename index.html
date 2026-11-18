@@ -956,7 +956,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function vMailText(p,e,ym){
     var c=vCalc(p,e),R=e.rt||vRates(p),L=[];
     if(num(e.hours))L.push("Odpracované: "+fN(num(e.days))+" dní, "+fN(num(e.hours))+" h × "+eur0(R.rate)+" = "+eur0(c.work));
-    if(c.meal)L.push("Strava: "+fN(num(e.days))+" dní"+(num(e.sundays)&&R.sun?" (z toho "+fN(num(e.sundays))+" nedieľ za "+eur0(R.meal-R.sun)+")":"")+" = "+eur0(c.meal));
+    if(c.meal)L.push("Strava: "+fN(num(e.days))+" dní"+(num(e.sundays)&&R.sun?" (z toho "+fN(num(e.sundays))+" "+(function(n){return n===1?"nedeľa":n>=2&&n<=4?"nedele":"nedieľ"})(num(e.sundays))+" za "+eur0(R.meal-R.sun)+")":"")+" = "+eur0(c.meal));
     if(c.wkd)L.push("Príplatok za víkend: "+fN(num(e.wkd))+" h × "+eur0(R.wkd)+" = "+eur0(c.wkd));
     if(c.hol)L.push("Príplatok za sviatok: "+fN(num(e.hol))+" h × "+eur0(R.rate)+" = "+eur0(c.hol));
     if(c.vac)L.push("Dovolenka: "+fN(num(e.vac))+" h × "+eur0(R.rate)+" = "+eur0(c.vac));
