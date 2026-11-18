@@ -25,7 +25,8 @@
  *  - odpracovaný deň = riadok s časom v stĺpci „Celkový čas“ (E), bez dovolenky/paragrafu
  *  - hodiny = súčet odpracovaných hodín
  *  - nedele = počet odpracovaných nedieľ
- *  - víkend = hodiny odpracované v sobotu a v nedeľu (okrem sviatkov)
+ *  - sobota / nedeľa = hodiny odpracované v sobotu / v nedeľu (okrem sviatkov),
+ *    príplatok (50 % / 100 %) sa nastavuje v appke
  *  - sviatok = hodiny odpracované v deň označený zelenou farbou
  *    (príplatok sa ráta len raz, aj keď sviatok padne na víkend)
  *  - dovolenka / paragraf = podľa poznámky (F); v ten deň sa neráta odpracovaný deň.
@@ -68,7 +69,7 @@ function handle_(p) {
   try {
     var t = PropertiesService.getScriptProperties().getProperty('TOKEN');
     if (!t || p.token !== t) out = { ok: false, error: 'kluc' };
-    else if (p.action === 'ping') out = { ok: true, folder: folder_().getName() };
+    else if (p.action === 'ping') out = { ok: true, folder: folder_().getName(), ver: 2 };
     else if (p.action === 'read') out = read_(p);
     else if (p.action === 'mail') out = mail_(p);
     else out = { ok: false, error: 'neznama akcia' };
@@ -132,7 +133,7 @@ function read_(p) {
   var sh = ss.getSheetByName(MESIACE[mon - 1]);
   if (!sh) throw new Error('V tabuľke „' + ss.getName() + '“ nie je hárok „' + MESIACE[mon - 1] + '“.');
   var last = sh.getLastRow();
-  var res = { ok: true, file: ss.getName(), sheet: sh.getName(), days: 0, hours: 0, sundays: 0, wkd: 0, hol: 0, vac: 0, par: 0, holDays: [], notes: [] };
+  var res = { ok: true, file: ss.getName(), sheet: sh.getName(), days: 0, hours: 0, sundays: 0, sat: 0, sunh: 0, hol: 0, vac: 0, par: 0, holDays: [], notes: [] };
   if (last < 2) return res;
   var rng = sh.getRange(2, 1, last - 1, 6);
   var vals = rng.getDisplayValues(), bgs = rng.getBackgrounds();
@@ -163,10 +164,11 @@ function read_(p) {
     res.hours += h;
     if (dow === 0) res.sundays++;
     if (isHol) res.hol += h;
-    else if (dow === 0 || dow === 6) res.wkd += h;
+    else if (dow === 6) res.sat += h;
+    else if (dow === 0) res.sunh += h;
   }
   if (!found) throw new Error('Na hárku „' + sh.getName() + '“ nie sú dni z ' + mon + '/' + year + '.');
-  ['hours', 'wkd', 'hol', 'vac', 'par'].forEach(function (k) { res[k] = r2_(res[k]); });
+  ['hours', 'sat', 'sunh', 'hol', 'vac', 'par'].forEach(function (k) { res[k] = r2_(res[k]); });
   return res;
 }
 
