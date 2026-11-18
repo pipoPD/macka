@@ -820,7 +820,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     ps.forEach(function(p){
       var e=en[p.id]||{},t=vTotal(p,e);
       h+='<div class="card" data-p="'+p.id+'"><div class="line" style="border:0"><h3>'+esc(p.name)+(p.type==="brig"?' <span class="small">brigádnik</span>':'')+'</h3><strong class="vtot vt">'+(t==null?"—":eur0(t))+'</strong></div>';
-      if(p.sheet){
+      {
         var bz=vBusy[p.id];
         h+='<div class="vact"><button class="btn sm" data-act="vLoad"'+(bz?' disabled':'')+'>'+(bz==="load"?'Načítavam…':'Načítať dáta')+'</button><button class="btn sm ghost" data-act="vMail"'+(bz?' disabled':'')+'>'+(bz==="mail"?'Posielam…':'Poslať e-mail')+'</button></div>';
         var inf=[];if(e.imported)inf.push("Dochádzka načítaná "+esc(e.imported));if(e.sent)inf.push("E-mail poslaný "+esc(e.sent));
@@ -933,6 +933,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function vLoadP(pid){
     var p=vPerson(pid);if(!p||vBusy[pid])return;
     if(!vGsOn()){alert("Najprv nastav Google dochádzku (záložka Ľudia, dole).");return}
+    if(!p.sheet){alert("Pri osobe "+p.name+" doplň „Súbor dochádzky“ (záložka Ľudia) – presný názov Sheetu, napr. "+p.name+".");return}
     var ym=vMonth;
     vFlush();vBusy[pid]="load";renderV();
     vApi({action:"read",file:p.sheet,ym:ym}).then(function(d){
