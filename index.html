@@ -61,6 +61,8 @@ h2{font-size:1.7rem;margin-bottom:4px}
 .t-vyplaty{background:var(--mint)}
 .t-naklady{background:var(--sand)}
 .t-vianoce{background:var(--xmas)}
+.t-zaloha{background:var(--pist)}
+.zban{display:block;margin:0 0 16px;padding:12px 16px;border-radius:16px;background:var(--apri);color:var(--tile-ink);font-weight:700;text-decoration:none;box-shadow:var(--shadow)}
 .grid .tile:last-child:nth-child(odd){grid-column:1/-1;min-height:120px;flex-direction:row;align-items:center;justify-content:flex-start}
 .r-cennik{background:var(--lav)}
 .r-naklady{background:var(--sand)}
@@ -172,6 +174,7 @@ details.card summary{cursor:pointer;font-weight:700}
 
   <main id="home">
     <header class="hero"><svg class="logo" aria-hidden="true"><use href="#logo"/></svg><div><h1>Macka.</h1></div></header>
+    <a class="zban" id="zBanner" href="#zaloha" hidden></a>
     <nav class="grid" aria-label="Hlavné menu">
       <a class="tile t-vianoce" href="#vianoce-2026">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-1.5-3-5-4-5-1.5S10 8 12 8zM12 8c1.5-3 5-4 5-1.5S14 8 12 8z"/></svg>
@@ -196,6 +199,10 @@ details.card summary{cursor:pointer;font-weight:700}
       <a class="tile t-naklady" href="#naklady">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg>
         <div><span>Náklady</span><small>Cukráreň, firma, suroviny</small></div>
+      </a>
+      <a class="tile t-zaloha" href="#zaloha">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.5 1.5A3.75 3.75 0 0 1 17.5 18z"/><path d="M12 11v6M9.5 13.5 12 11l2.5 2.5"/></svg>
+        <div><span>Záloha</span><small id="zTileSub">Denná záloha na Google Drive</small></div>
       </a>
     </nav>
     <p class="sub" style="margin-top:28px"><button class="x" id="logout">Odhlásiť sa</button></p>
@@ -251,6 +258,12 @@ details.card summary{cursor:pointer;font-weight:700}
     <div id="vy-body"></div>
   </section>
 
+  <section id="zaloha" hidden>
+    <a class="back" href="#">‹ Späť</a>
+    <h2>Záloha</h2>
+    <div id="z-body"></div>
+  </section>
+
   <section id="naklady" hidden>
     <a class="back" href="#">‹ Späť</a>
     <h2>Náklady</h2>
@@ -298,14 +311,15 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,collection,onSnapshot,setDoc,deleteDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 (function(){
-  var routes={"":"home","recepty":"recepty","normy":"normy","vianoce-2026":"vianoce","normy/vianoce-2026":"vianoce","cennik":"cennik","cennik/torty":"cennik-torty","cennik/kolace":"cennik-kolace","cennik/napoje":"cennik-napoje","vyplaty":"vyplaty","naklady":"naklady","naklady/cukraren":"naklady-cukraren","naklady/firma":"naklady-firma","naklady/suroviny":"naklady-suroviny"};
-  var ids=["home","recepty","normy","vianoce","cennik","cennik-torty","cennik-kolace","cennik-napoje","vyplaty","naklady","naklady-cukraren","naklady-firma","naklady-suroviny"];
+  var routes={"":"home","recepty":"recepty","normy":"normy","vianoce-2026":"vianoce","normy/vianoce-2026":"vianoce","cennik":"cennik","cennik/torty":"cennik-torty","cennik/kolace":"cennik-kolace","cennik/napoje":"cennik-napoje","vyplaty":"vyplaty","naklady":"naklady","naklady/cukraren":"naklady-cukraren","naklady/firma":"naklady-firma","naklady/suroviny":"naklady-suroviny","zaloha":"zaloha"};
+  var ids=["home","recepty","normy","vianoce","cennik","cennik-torty","cennik-kolace","cennik-napoje","vyplaty","naklady","naklady-cukraren","naklady-firma","naklady-suroviny","zaloha"];
   function show(){
     var h=(location.hash||"").replace("#","");
     var t=routes[h]||"home";
     ids.forEach(function(id){document.getElementById(id).hidden=(id!==t)});
     if(t==="vianoce")render();
     if(t==="vyplaty")renderV();
+    if(t==="zaloha")openZ();
     if(t.indexOf("cennik-")===0){cnEdit=null;renderC(t.slice(7))}
     window.scrollTo(0,0);
   }
@@ -388,12 +402,12 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       arr.sort(function(a,b){return (a.no||0)-(b.no||0)});
       S.orders=arr;gotOrders=true;refresh();
     },fail));
-    startV();startC();
+    startV();startC();startZ();
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
     S={cakes:[],boxes:[],orders:[],pair:105};lastCfg="";lastOrders={};editId=null;
-    stopV();stopC();
+    stopV();stopC();stopZ();
   }
   function initAuth(){
     var lg=document.getElementById("login"),msg=document.getElementById("loginMsg"),form=document.getElementById("loginForm");
@@ -1122,6 +1136,125 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     vFlush();vSaveCfgNow();
     if(!vPending)return;
     setTimeout(function(){if(vInField())return;vPending=false;renderV()},600);
+  });
+  /* ---- Záloha (Apps Script Dochadzka.gs zálohuje každú noc do Google Drive, stav v apps/zaloha) ---- */
+  var ZS=null,zGot=false,zUn=null,zFiles=null,zErr="",zBusy="",ZOLD=7;
+  var zBody=document.getElementById("z-body");
+  function startZ(){
+    if(zUn||!cfgOk)return;
+    zUn=onSnapshot(doc(db,"apps","zaloha"),function(snap){ZS=snap.exists()?snap.data():null;zGot=true;zBanner();if(location.hash==="#zaloha")renderZ()},fail);
+  }
+  function stopZ(){if(zUn)zUn();zUn=null;ZS=null;zGot=false;zFiles=null;zErr="";zBusy="";zBanner()}
+  function zAge(){return ZS&&ZS.last?(Date.now()-new Date(ZS.last).getTime())/864e5:Infinity}
+  function zWhen(iso){var d=new Date(iso);return isNaN(d)?"":d.toLocaleString("sk-SK",{day:"numeric",month:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+  function zDays(n){n=Math.floor(n);return n+(n===1?" deň":n>=2&&n<=4?" dni":" dní")}
+  function zBanner(){
+    var b=document.getElementById("zBanner"),sub=document.getElementById("zTileSub");
+    if(!zGot){b.hidden=true;return}
+    var a=zAge();
+    sub.textContent=ZS&&ZS.last?"Posledná: "+zWhen(ZS.last):"Denná záloha na Google Drive";
+    if(a>ZOLD){b.hidden=false;b.textContent=ZS&&ZS.last?"⚠ Posledná záloha je stará "+zDays(a)+". Skontroluj zálohu ›":"⚠ Záloha ešte nie je nastavená ›"}
+    else if(ZS&&ZS.err&&ZS.errAt&&ZS.errAt>ZS.last){b.hidden=false;b.textContent="⚠ Posledná záloha zlyhala ›"}
+    else b.hidden=true;
+  }
+  function zSize(n){return n>=1048576?fN(n/1048576)+" MB":fN(Math.max(1,Math.round(n/1024)))+" kB"}
+  function openZ(){if(vGsOn()&&zFiles===null&&!zBusy)zLoadList();renderZ()}
+  function zLoadList(){
+    zBusy="list";zErr="";renderZ();
+    vApi({action:"zalohaList"}).then(function(d){zFiles=d.files||[]}).catch(function(e){zErr=e.message;zFiles=null}).then(function(){zBusy="";renderZ()});
+  }
+  function renderZ(){
+    if(!zBody)return;
+    var h='<div class="card"><h3>Stav</h3>';
+    if(!zGot)h+='<div class="small">Načítavam…</div>';
+    else if(ZS&&ZS.last){
+      var a=zAge();
+      h+='<div class="line"><span>Posledná záloha</span><strong'+(a>ZOLD?' class="warn"':'')+'>'+esc(zWhen(ZS.last))+'</strong></div>';
+      h+='<div class="small">'+esc(ZS.file||"")+' · '+(ZS.docs||0)+' dokumentov · '+zSize(ZS.size||0)+'</div>';
+      if(a>ZOLD)h+='<div class="small warn">Záloha je stará '+zDays(a)+'. Skontroluj, či je v Scripte zapnutá nočná záloha (funkcia zapniZalohu).</div>';
+    }else h+='<div class="small">Záloha ešte neprebehla. Nastav ju podľa krokov nižšie.</div>';
+    if(ZS&&ZS.err&&ZS.errAt&&(!ZS.last||ZS.errAt>ZS.last))h+='<div class="small warn" style="margin-top:6px">Posledný pokus '+esc(zWhen(ZS.errAt))+' zlyhal: '+esc(ZS.err)+'</div>';
+    h+='<div class="small" style="margin-top:6px">Záloha sa robí sama každú noc o 3:00 do priečinka „Macka. zálohy“ na Google Drive a drží sa 30 dní. Obsahuje Vianoce (aj objednávky), Cenník a Výplaty (bez kľúča k Scriptu).</div>';
+    if(vGsOn())h+='<div class="form"><button class="btn" data-act="zNow"'+(zBusy?' disabled':'')+'>'+(zBusy==="now"?'Zálohujem…':'Zálohovať teraz')+'</button></div>';
+    h+='</div>';
+    if(vGsOn()){
+      h+='<div class="card"><div class="line" style="border:0"><h3>Zálohy na Disku</h3><button class="x" data-act="zList"'+(zBusy?' disabled':'')+'>Obnoviť zoznam</button></div>';
+      if(zErr)h+='<div class="small warn">'+esc(zErr)+'</div>';
+      if(zBusy==="list")h+='<div class="small">Načítavam…</div>';
+      else if(zFiles&&!zFiles.length)h+='<div class="small">Zatiaľ žiadne zálohy.</div>';
+      else if(zFiles)zFiles.forEach(function(f){
+        h+='<div class="line"><span>'+esc(zWhen(f.date))+' <span class="small">'+zSize(f.size)+'</span></span><span><button class="linkbtn" data-act="zGet" data-id="'+esc(f.id)+'"'+(zBusy?' disabled':'')+'>Stiahnuť</button> &nbsp; <button class="linkbtn" data-act="zRestore" data-id="'+esc(f.id)+'" data-d="'+esc(zWhen(f.date))+'"'+(zBusy?' disabled':'')+'>Obnoviť</button></span></div>';
+      });
+      if(zBusy==="get")h+='<div class="small">Sťahujem…</div>';
+      if(zBusy==="restore")h+='<div class="small">Obnovujem… nezatváraj appku.</div>';
+      h+='</div>';
+    }
+    h+='<div class="card"><h3>Nastavenie (raz, na počítači)</h3>';
+    if(!vGsOn())h+='<div class="small warn">Najprv prepoj Script v časti Výplaty → Ľudia → Google dochádzka.</div>';
+    h+='<ol class="ksteps small"><li>Na <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> otvor projekt „Macka. Dochádzka“ a nahraď kód novým (tlačidlo nižšie). Ulož.</li>';
+    h+='<li>Vľavo <strong>Nastavenia projektu</strong> (ozubené koliesko) → zaškrtni <strong>Zobraziť súbor manifestu „appsscript.json“ v editore</strong>.</li>';
+    h+='<li>V Editore otvor <strong>appsscript.json</strong>, nahraď jeho obsah (tlačidlo Kopírovať manifest) a ulož.</li>';
+    h+='<li>Hore vyber funkciu <strong>zapniZalohu</strong> → <strong>Spustiť</strong> → povoľ prístup. Skript musí bežať pod Google účtom, ktorý vlastní Firebase projekt.</li>';
+    h+='<li><strong>Nasadiť → Spravovať nasadenia</strong> → ceruzka → Verzia: <strong>Nová verzia</strong> → Nasadiť.</li></ol>';
+    h+='<div class="form"><button class="btn sm" data-act="zCopy" data-f="Dochadzka.gs">Kopírovať kód skriptu</button><button class="btn sm ghost" data-act="zCopy" data-f="appsscript.json">Kopírovať manifest</button></div></div>';
+    zBody.innerHTML=h;
+  }
+  function zDownload(name,obj){
+    var blob=new Blob([JSON.stringify(obj,null,1)],{type:"application/json"});
+    var l=document.createElement("a");l.href=URL.createObjectURL(blob);l.download=name;
+    document.body.appendChild(l);l.click();l.remove();setTimeout(function(){URL.revokeObjectURL(l.href)},2000);
+  }
+  function zRestore(d){
+    if(!d||d.app!=="macka-zaloha"||!d.docs||typeof d.docs!=="object")throw new Error("Súbor nie je záloha appky.");
+    var paths=Object.keys(d.docs).filter(function(k){return /^apps\/[^\/]+(\/[^\/]+\/[^\/]+)*$/.test(k)&&k!=="apps/zaloha"});
+    if(!paths.length)throw new Error("Záloha je prázdna.");
+    var ops=[];
+    paths.forEach(function(k){
+      var data=JSON.parse(JSON.stringify(d.docs[k]));
+      if(k==="apps/vyplaty")data.gs=VS.gs&&VS.gs.url?{url:VS.gs.url,token:VS.gs.token}:(data.gs&&data.gs.url?{url:data.gs.url,token:""}:{url:"",token:""});
+      ops.push(["set",k,data]);
+    });
+    S.orders.forEach(function(o){var k="apps/vianoce2026/orders/"+o.id;if(paths.indexOf(k)<0)ops.push(["del",k])});
+    Object.keys(VS.months).forEach(function(m){var k="apps/vyplaty/months/"+m;if(paths.indexOf(k)<0)ops.push(["del",k])});
+    var chunks=[];for(var i=0;i<ops.length;i+=400)chunks.push(ops.slice(i,i+400));
+    return chunks.reduce(function(pr,ch){return pr.then(function(){
+      var wb=writeBatch(db);
+      ch.forEach(function(o){if(o[0]==="set")wb.set(doc(db,o[1]),o[2]);else wb.delete(doc(db,o[1]))});
+      return wb.commit();
+    })},Promise.resolve()).then(function(){return paths.length});
+  }
+  document.getElementById("zaloha").addEventListener("click",function(ev){
+    var t=ev.target.closest("button");if(!t||!t.dataset.act)return;var a=t.dataset.act;
+    if(a==="zCopy"){
+      fetch("google-apps-script/"+t.dataset.f,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(tx){return navigator.clipboard.writeText(tx)}).then(function(){toast("Skopírované: "+t.dataset.f)},function(){toast("Kopírovanie nefunguje, otvor github.com/pipoPD/macka/blob/main/google-apps-script/"+t.dataset.f)});
+      return;
+    }
+    if(zBusy)return;
+    if(a==="zList"){zLoadList();return}
+    if(a==="zNow"){
+      zBusy="now";zErr="";renderZ();
+      vApi({action:"zalohaNow"}).then(function(d){toast("Záloha hotová: "+d.docs+" dokumentov");zFiles=null}).catch(function(e){alert("Záloha zlyhala.\n"+e.message)}).then(function(){zBusy="";if(zFiles===null)zLoadList();else renderZ()});
+      return;
+    }
+    if(a==="zGet"){
+      zBusy="get";renderZ();
+      vApi({action:"zalohaGet",id:t.dataset.id}).then(function(d){zDownload(d.name,d.data)}).catch(function(e){alert("Stiahnutie zlyhalo.\n"+e.message)}).then(function(){zBusy="";renderZ()});
+      return;
+    }
+    if(a==="zRestore"){
+      if(!confirm("Obnoviť CELÚ appku zo zálohy z "+t.dataset.d+"?\n\nVšetky objednávky, cenník a výplaty sa vrátia do stavu z tejto zálohy. Zmeny urobené potom sa stratia."))return;
+      if(prompt("Na potvrdenie napíš OBNOVIŤ")!=="OBNOVIŤ"){toast("Obnova zrušená");return}
+      var id=t.dataset.id;
+      zBusy="restore";renderZ();
+      vFlush();vSaveCfgNow();
+      // najprv záloha aktuálneho stavu, potom obnova
+      vApi({action:"zalohaNow"}).catch(function(e){if(!confirm("Zálohu aktuálneho stavu sa nepodarilo urobiť ("+e.message+").\nPokračovať v obnove aj tak?"))throw new Error("zrušené")})
+        .then(function(){return vApi({action:"zalohaGet",id:id})})
+        .then(function(d){return zRestore(d.data)})
+        .then(function(n){alert("Obnovené ("+n+" dokumentov). Appka sa teraz znova načíta.");location.reload()})
+        .catch(function(e){if(e.message!=="zrušené")alert("Obnova zlyhala.\n"+e.message);zBusy="";renderZ()});
+      return;
+    }
   });
   try{Object.keys(localStorage).forEach(function(k){if(k.indexOf("mt_cal")===0)localStorage.removeItem(k)})}catch(e){}
   show();

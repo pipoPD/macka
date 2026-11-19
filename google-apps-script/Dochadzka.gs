@@ -1,5 +1,5 @@
 /**
- * Macka. – dochádzka a výplaty
+ * Macka. – dochádzka, výplaty a záloha
  *
  * Skript beží v Google účte, kde je priečinok „Mackine Torty“ s dochádzkou
  * (každý zamestnanec má vlastný Sheet, v ňom hárky Január…December).
@@ -20,6 +20,15 @@
  *
  * Po zmene kódu: vlož nový kód, ulož, potom Nasadiť → Spravovať nasadenia
  * → ceruzka → Verzia: Nová verzia → Nasadiť. URL zostane rovnaká.
+ *
+ * ZÁLOHA (každú noc o 3:00 do priečinka „Macka. zálohy“ na Disku, 30 dní):
+ *  1. Nastavenia projektu (ozubené koliesko vľavo) → zaškrtni
+ *     „Zobraziť súbor manifestu appsscript.json v editore“.
+ *  2. V Editore otvor appsscript.json a nahraď jeho obsah súborom
+ *     google-apps-script/appsscript.json (v appke: Záloha → Kopírovať manifest). Ulož.
+ *  3. Hore vyber funkciu „zapniZalohu“ → Spustiť → povoľ prístup.
+ *     Skript musí bežať pod Google účtom, ktorý vlastní projekt Firebase.
+ *  4. Nasadiť → Spravovať nasadenia → ceruzka → Nová verzia → Nasadiť.
  *
  * Pravidlá výpočtu (jeden riadok = jeden deň):
  *  - odpracovaný deň = riadok s časom v stĺpci „Celkový čas“ (E), bez dovolenky/paragrafu
@@ -69,9 +78,12 @@ function handle_(p) {
   try {
     var t = PropertiesService.getScriptProperties().getProperty('TOKEN');
     if (!t || p.token !== t) out = { ok: false, error: 'kluc' };
-    else if (p.action === 'ping') out = { ok: true, folder: folder_().getName(), ver: 2 };
+    else if (p.action === 'ping') out = { ok: true, folder: folder_().getName(), ver: 3 };
     else if (p.action === 'read') out = read_(p);
     else if (p.action === 'mail') out = mail_(p);
+    else if (p.action === 'zalohaNow') out = zalohuj();
+    else if (p.action === 'zalohaList') out = zalohaList_();
+    else if (p.action === 'zalohaGet') out = zalohaGet_(p);
     else out = { ok: false, error: 'neznama akcia' };
   } catch (err) {
     out = { ok: false, error: String(err && err.message || err) };
@@ -180,4 +192,150 @@ function mail_(p) {
   if (!subject || !body) throw new Error('Prázdny e-mail.');
   MailApp.sendEmail({ to: to, subject: subject, body: body, name: 'Macka.' });
   return { ok: true };
+}
+
+/* ===================== ZÁLOHA ===================== */
+
+var PROJEKT = 'mackine-torty';
+var ZALOHY = 'Macka. zálohy';
+var ZALOHY_DNI = 30;
+
+// Spusti raz: nastaví nočnú zálohu (o 3:00) a hneď jednu urobí.
+function zapniZalohu() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'zalohuj') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('zalohuj').timeBased().everyDays(1).atHour(3).create();
+  var r = zalohuj();
+  Logger.log('Nočná záloha zapnutá. Prvá záloha: ' + r.file + ' (' + r.docs + ' dokumentov, ' + r.size + ' B)');
+}
+
+function zalohuj() {
+  try {
+    var docs = {};
+    walkCol_('apps', docs);
+    var n = Object.keys(docs).length;
+    if (!n) throw new Error('Databáza je prázdna, zálohu som neuložil.');
+    var now = new Date();
+    var name = 'macka-zaloha-' + Utilities.formatDate(now, 'Europe/Bratislava', 'yyyy-MM-dd') + '.json';
+    var json = JSON.stringify({ app: 'macka-zaloha', ver: 1, created: now.toISOString(), project: PROJEKT, docs: docs });
+    var f = zFolder_();
+    var old = f.getFilesByName(name);
+    while (old.hasNext()) old.next().setTrashed(true);
+    var file = f.createFile(name, json, 'application/json');
+    var limit = now.getTime() - ZALOHY_DNI * 864e5;
+    var it = f.getFiles();
+    while (it.hasNext()) {
+      var x = it.next();
+      if (/^macka-zaloha-.*\.json$/.test(x.getName()) && x.getDateCreated().getTime() < limit) x.setTrashed(true);
+    }
+    var info = { last: now.toISOString(), file: name, size: json.length, docs: n, err: '', errAt: '' };
+    fs_('patch', 'apps/zaloha', { fields: toFields_(info) });
+    info.ok = true;
+    info.id = file.getId();
+    return info;
+  } catch (err) {
+    var msg = String(err && err.message || err);
+    try {
+      fs_('patch', 'apps/zaloha?updateMask.fieldPaths=err&updateMask.fieldPaths=errAt',
+        { fields: toFields_({ err: msg, errAt: new Date().toISOString() }) });
+    } catch (x) {}
+    throw err;
+  }
+}
+
+function zFolder_() {
+  var it = DriveApp.getFoldersByName(ZALOHY);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(ZALOHY);
+}
+
+function zalohaList_() {
+  var it = zFolder_().getFiles(), out = [];
+  while (it.hasNext()) {
+    var x = it.next();
+    if (!/^macka-zaloha-.*\.json$/.test(x.getName())) continue;
+    out.push({ id: x.getId(), name: x.getName(), size: x.getSize(), date: x.getDateCreated().toISOString() });
+  }
+  out.sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  return { ok: true, files: out };
+}
+
+function zalohaGet_(p) {
+  var f = DriveApp.getFileById(String(p.id || ''));
+  var par = f.getParents(), inside = false, fid = zFolder_().getId();
+  while (par.hasNext()) if (par.next().getId() === fid) inside = true;
+  if (!inside || !/^macka-zaloha-.*\.json$/.test(f.getName())) throw new Error('Súbor nie je záloha.');
+  return { ok: true, name: f.getName(), data: JSON.parse(f.getBlob().getDataAsString('UTF-8')) };
+}
+
+// Firestore REST pod Google účtom vlastníka projektu (pravidlá sa neuplatnia)
+function fs_(method, path, body) {
+  var url = 'https://firestore.googleapis.com/v1/projects/' + PROJEKT + '/databases/(default)/documents/' + path;
+  var o = {
+    method: method,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'x-goog-user-project': PROJEKT },
+    muteHttpExceptions: true
+  };
+  if (body) { o.contentType = 'application/json'; o.payload = JSON.stringify(body); }
+  var r = UrlFetchApp.fetch(url, o), code = r.getResponseCode(), t = r.getContentText();
+  if (code >= 300) {
+    var m = t;
+    try { m = JSON.parse(t).error.message; } catch (x) {}
+    if (code === 403) m = 'Firebase odmietol prístup. Skript musí bežať pod Google účtom, ktorý vlastní projekt ' + PROJEKT + ', a v appsscript.json musí byť povolenie „datastore“. (' + m + ')';
+    throw new Error('Firebase ' + code + ': ' + m);
+  }
+  return t ? JSON.parse(t) : {};
+}
+
+function walkCol_(col, out) {
+  var token = '';
+  do {
+    var r = fs_('get', col + '?pageSize=300&showMissing=true' + (token ? '&pageToken=' + encodeURIComponent(token) : ''));
+    (r.documents || []).forEach(function (d) {
+      var rel = d.name.split('/documents/')[1];
+      if (rel === 'apps/zaloha') return;
+      if (d.createTime) {
+        var data = fromFields_(d.fields || {});
+        if (rel === 'apps/vyplaty' && data.gs) delete data.gs.token; // kľúč do zálohy nepatrí
+        out[rel] = data;
+      }
+      var ct = '';
+      do {
+        var c = fs_('post', rel + ':listCollectionIds', ct ? { pageSize: 100, pageToken: ct } : { pageSize: 100 });
+        (c.collectionIds || []).forEach(function (id) { walkCol_(rel + '/' + id, out); });
+        ct = c.nextPageToken || '';
+      } while (ct);
+    });
+    token = r.nextPageToken || '';
+  } while (token);
+}
+
+function fromFields_(f) {
+  var o = {};
+  Object.keys(f).forEach(function (k) { o[k] = fromVal_(f[k]); });
+  return o;
+}
+
+function fromVal_(v) {
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('mapValue' in v) return fromFields_(v.mapValue.fields || {});
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(fromVal_);
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('referenceValue' in v) return v.referenceValue;
+  if ('geoPointValue' in v) return v.geoPointValue;
+  if ('bytesValue' in v) return v.bytesValue;
+  return null;
+}
+
+function toFields_(o) {
+  var f = {};
+  Object.keys(o).forEach(function (k) {
+    var v = o[k];
+    f[k] = typeof v === 'number' ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v }) : { stringValue: String(v) };
+  });
+  return f;
 }
