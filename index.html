@@ -105,6 +105,7 @@ td.r,th.r{text-align:right}
 .ksteps li{margin:4px 0}
 .vact{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .btn.sm{padding:7px 12px;font-size:.88rem}
+.warn{color:var(--berry);font-weight:700}
 .btn.ghost{background:var(--surface);color:var(--berry);border:1px solid var(--line)}
 .btn:disabled{opacity:.6;cursor:default}
 @media (min-width:560px){.vgrid{grid-template-columns:repeat(3,1fr)}}
@@ -819,6 +820,25 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     return s;
   }
 
+  // Dovolenka a paragraf od začiatku roka po zobrazený mesiac (1 deň = 8 h, paragraf max 7 dní/rok)
+  var VDAY=8,VPARMAX=7;
+  function vYearUse(pid,ym){
+    var y=ym.slice(0,4),u={vac:0,par:0};
+    Object.keys(VS.months).forEach(function(k){
+      if(k.slice(0,4)!==y||k>ym)return;
+      var e=vEntries(k)[pid];if(!e)return;
+      u.vac+=num(e.vac);u.par+=num(e.par);
+    });
+    return u;
+  }
+  function vYearUseView(p,ym){
+    var u=vYearUse(p.id,ym),y=ym.slice(0,4),L=[],N=num(p.dovN);
+    var vd=u.vac/VDAY,pd=u.par/VDAY;
+    if(N){var left=N-vd;L.push('<span'+(left<0?' class="warn"':'')+'>Dovolenka '+y+': vyčerpané '+fN(vd)+' z '+fN(N)+' dní, ostáva '+fN(left)+(left<0?' ⚠':'')+'</span>')}
+    else if(u.vac)L.push('Dovolenka '+y+': vyčerpané '+fN(vd)+' dní');
+    if(u.par||N)L.push('<span'+(pd>VPARMAX?' class="warn"':'')+'>Paragraf '+y+': '+fN(pd)+' dní ('+fN(u.par)+' h) zo '+VPARMAX+(pd>VPARMAX?' ⚠ prekročený limit':'')+'</span>');
+    return L.length?'<div class="small">'+L.join(' · ')+'</div>':'';
+  }
   function vMonthView(){
     var en=vEntries(vMonth),ps=vPeopleIn(vMonth);
     var h='<div class="card"><div class="mbar"><button class="x" data-act="vPrev" aria-label="Predchádzajúci mesiac">‹</button><h3>'+ymLabel(vMonth)+'</h3><button class="x" data-act="vNext" aria-label="Ďalší mesiac">›</button></div><div class="line" style="border:0;margin-top:6px"><span>Výplaty spolu</span><strong class="vtot" id="vMonthSum">'+eur0(vMonthSum(vMonth))+'</strong></div></div>';
@@ -841,9 +861,10 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       });
       h+='<label class="full">Poznámka<input class="vin" data-k="note" value="'+esc(e.note||"")+'" placeholder="napr. za čo je suma Iné"></label></div>';
       h+='<div class="small vb" style="margin-top:8px">'+esc(vBreak(p,e))+'</div>';
-      var bal=[];if(p.type!=="brig"){if(p.dov)bal.push("Dovolenka: "+esc(p.dov));if(p.par)bal.push("Paragraf: "+esc(p.par))}
+      var bal=[];if(p.type!=="brig"&&!num(p.dovN)){if(p.dov)bal.push("Dovolenka: "+esc(p.dov));if(p.par)bal.push("Paragraf: "+esc(p.par))}
       h+='<div class="small">Sadzby: '+vRateNote(p,e)+(e.rt&&ser(vR(e.rt))!==ser(vR(vRates(p)))?' <button class="linkbtn" data-act="vRerate">použiť aktuálne</button>':'')+'</div>';
       if(bal.length)h+='<div class="small">Zostatok · '+bal.join(" · ")+'</div>';
+      if(p.type!=="brig")h+=vYearUseView(p,vMonth);
       h+='</div>';
     });
     return h;
@@ -889,8 +910,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       h+='<label>Súbor dochádzky<input class="vpin" data-k="sheet" value="'+esc(p.sheet||"")+'" placeholder="názov Sheetu"></label>';
       h+='<label>E-mail<input class="vpin" data-k="email" type="email" value="'+esc(p.email||"")+'" autocomplete="off"></label>';
       if(p.type!=="brig"){
-        h+='<label>Zostatok dovolenky<input class="vpin" data-k="dov" value="'+esc(p.dov||"")+'" placeholder="napr. 8 dní"></label>';
-        h+='<label>Zostatok paragrafu<input class="vpin" data-k="par" value="'+esc(p.par||"")+'" placeholder="napr. 22 hodín"></label>';
+        h+='<label>Nárok dovolenky (dní/rok)<input class="vpin" data-k="dovN" data-n="1" inputmode="decimal" value="'+nv(p.dovN)+'" placeholder="napr. 20"></label>';
       }
       h+='<label class="chk full"><input type="checkbox" class="vpin" data-k="active"'+(p.active!==false?' checked':'')+'> Zobrazovať v mesiaci</label></div></div>';
     });
