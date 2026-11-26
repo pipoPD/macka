@@ -564,9 +564,9 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var all=[];S.orders.forEach(function(o){all=all.concat(o.lines)});
     var pcs=pieces(all),tot={},bq=boxQty(all),rf=1+(S.rez||0)/100;
     S.cakes.forEach(function(c){var n=pcs[c.id]||0;if(!n)return;var nm=normOf(c),f=n/batchOf(nm);nm.items.forEach(function(it){
-      var b=BASE[it.unit]||[it.unit,1],g=ingOf(it),ok=g&&UF[g.unit]&&UF[g.unit][0]===b[0];
+      var b=BASE[it.unit]||[it.unit,1],g=ingOf(it),qi=qtyIn(it,g),ok=qi!==null;
       var k=ok?"i:"+g.id:"n:"+cnPlain(it.name.trim())+"|"+b[0];
-      tot[k]=tot[k]||{name:ok?g.name:(g?g.name:it.name.trim()),unit:b[0],q:0,g:ok?g:null};tot[k].q+=num(it.qty)*b[1]*f;
+      tot[k]=tot[k]||{name:ok?g.name:it.name.trim(),unit:ok?UF[g.unit][0]:b[0],q:0,g:ok?g:null};tot[k].q+=(ok?qi:num(it.qty)*b[1])*f;
     })});
     var h='<div class="card"><h3>Krabičky</h3><table>';
     S.boxes.forEach(function(b){h+='<tr><td>'+esc(b.name)+'</td><td class="r">'+(bq[b.id]||0)+' ks</td></tr>'});
@@ -866,9 +866,19 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function fmtN(n){return String(Math.round(n*1000)/1000).replace(".",",")}
   function ing(id){return SR.items.filter(function(x){return x.id===id})[0]}
   function ingByName(n){var k=cnPlain(String(n||"").trim());return k?SR.items.filter(function(x){return cnPlain(String(x.name).trim())===k})[0]:null}
-  function ingOf(it){return (it.ingId&&ing(it.ingId))||ingByName(it.name)||null}
+  // žĺtok/bielok v norme sa počíta ako Vajce z katalógu (1 ks = 1 vajce; gramy: žĺtok 20 g, bielok 30 g)
+  function eggG(n){var k=cnPlain(String(n||"").trim());return /^zlt/.test(k)?20:/^biel/.test(k)?30:0}
+  function eggItem(){return SR.items.filter(function(x){return /^vaj[ci]/.test(cnPlain(String(x.name).trim()))})[0]||null}
+  function ingOf(it){return (it.ingId&&ing(it.ingId))||ingByName(it.name)||(eggG(it.name)?eggItem():null)}
+  // množstvo položky normy v základnej jednotke suroviny z katalógu (g/ml/ks), null ak sa nedá prepočítať
+  function qtyIn(it,g){
+    var b=BASE[it.unit];if(!g||!b||!UF[g.unit])return null;
+    if(b[0]===UF[g.unit][0])return num(it.qty)*b[1];
+    var e=eggG(it.name);if(e&&UF[g.unit][0]==="ks"&&b[0]==="g")return num(it.qty)*b[1]/e;
+    return null;
+  }
   function unitCost(g){if(!g||!UF[g.unit]||!(g.price>0)||!(g.pack>0))return null;return g.price/(g.pack*UF[g.unit][1])}
-  function itemCost(it){var g=ingOf(it),b=BASE[it.unit];if(!g||!b||!UF[g.unit]||b[0]!==UF[g.unit][0])return null;var u=unitCost(g);return u===null?null:num(it.qty)*b[1]*u}
+  function itemCost(it){var g=ingOf(it),q=qtyIn(it,g);if(q===null)return null;var u=unitCost(g);return u===null?null:q*u}
   function batchOf(n){return n&&n.batch>0?n.batch:1}
   // norma koláča z Vianoc: z prepojeného receptu (cake.recId), inak stará kópia v koláči
   function recOf(c){return c&&c.recId&&rcGot?rcItem(c.recId)||null:null}
@@ -885,7 +895,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       var g=ingOf(it),x=itemCost(it),b=BASE[it.unit]||[it.unit,1],tg='';
       if(!g)tg=' <span class="tag">mimo katalógu</span>'+(act?' <button class="linkbtn" data-act="'+act+'" data-i="'+i+'">Do katalógu</button>':'');
       else if(x===null)tg=' <span class="tag">'+(unitCost(g)===null?'bez ceny':'iná jednotka')+'</span>';
-      h+='<tr><td>'+esc(g?g.name:it.name)+tg+'<div class="small">dávka: '+fmt(num(it.qty)*b[1],b[0])+(g&&unitCost(g)!==null?' · '+e2(unitCost(g)*UF[g.unit][1])+'/'+g.unit:'')+'</div></td><td class="r">'+fmt(num(it.qty)*b[1]/bt,b[0])+'</td><td class="r">'+(x!==null?e2(x/bt):'—')+'</td></tr>';
+      var al=g&&eggG(it.name)&&cnPlain(g.name)!==cnPlain(it.name);
+      h+='<tr><td>'+esc(al||!g?it.name:g.name)+tg+'<div class="small">'+(al?'počíta sa ako '+esc(g.name.toLowerCase())+' · ':'')+'dávka: '+fmt(num(it.qty)*b[1],b[0])+(g&&unitCost(g)!==null?' · '+e2(unitCost(g)*UF[g.unit][1])+'/'+g.unit:'')+'</div></td><td class="r">'+fmt(num(it.qty)*b[1]/bt,b[0])+'</td><td class="r">'+(x!==null?e2(x/bt):'—')+'</td></tr>';
     });
     h+='</tbody><tfoot><tr><td colspan="2">Spolu za 1 ks</td><td class="r">'+e2(cc.pc)+'</td></tr></tfoot></table>';
     h+='<div class="small">'+(bt>1?'Dávka '+bt+' ks: '+e2(cc.batch)+'. ':'')+(cc.miss?'<span class="warn">'+cc.miss+' surovín bez ceny, cena je preto nižšia.</span>':'')+'</div>';
