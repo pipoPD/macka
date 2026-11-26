@@ -866,10 +866,10 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function fmtN(n){return String(Math.round(n*1000)/1000).replace(".",",")}
   function ing(id){return SR.items.filter(function(x){return x.id===id})[0]}
   function ingByName(n){var k=cnPlain(String(n||"").trim());return k?SR.items.filter(function(x){return cnPlain(String(x.name).trim())===k})[0]:null}
-  // žĺtok/bielok v norme sa počíta ako Vajce z katalógu (1 ks = 1 vajce; gramy: žĺtok 20 g, bielok 30 g)
-  function eggG(n){var k=cnPlain(String(n||"").trim());return /^zlt/.test(k)?20:/^biel/.test(k)?30:0}
-  function eggItem(){return SR.items.filter(function(x){return /^vaj[ci]/.test(cnPlain(String(x.name).trim()))})[0]||null}
-  function ingOf(it){return (it.ingId&&ing(it.ingId))||ingByName(it.name)||(eggG(it.name)?eggItem():null)}
+  // vajce/vajíčko/žĺtok/bielok v norme sa vždy počíta ako jedna surovina Vajce z katalógu (1 ks = 1 vajce; gramy: vajce 50 g, žĺtok 20 g, bielok 30 g)
+  function eggG(n){var k=cnPlain(String(n||"").trim());return /^zlt/.test(k)?20:/^biel/.test(k)?30:/^vaj[ci]/.test(k)?50:0}
+  function eggItem(){var e=SR.items.filter(function(x){return /^vaj[ci]/.test(cnPlain(String(x.name).trim()))});return e.filter(function(x){return x.unit==="ks"})[0]||e[0]||null}
+  function ingOf(it){return (eggG(it.name)&&eggItem())||(it.ingId&&ing(it.ingId))||ingByName(it.name)||null}
   // množstvo položky normy v základnej jednotke suroviny z katalógu (g/ml/ks), null ak sa nedá prepočítať
   function qtyIn(it,g){
     var b=BASE[it.unit];if(!g||!b||!UF[g.unit])return null;
@@ -916,7 +916,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(cc)save();if(rc)rcSave();
   }
   function toCat(it){
-    if(!it||ingOf(it))return;var b=(BASE[it.unit]||["g"])[0];
+    if(!it||ingOf(it))return;
+    if(eggG(it.name)){SR.items.push({id:uid(),name:"Vajce",unit:"ks",pack:1,price:0,sup:"",note:""});return}var b=(BASE[it.unit]||["g"])[0];
     SR.items.push({id:uid(),name:String(it.name).trim(),unit:b==="ml"?"l":b==="ks"?"ks":"kg",pack:1,price:0,sup:"",note:""});
   }
   function srForm(g){
@@ -946,7 +947,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(g.pack>0)info.push('balenie '+fmtN(g.pack)+' '+g.unit+(g.price>0?' za '+e2(g.price):''));
       if(u!==null)info.push(e2(u*UF[g.unit][1])+'/'+g.unit);
       if(g.sup)info.push(esc(g.sup));
-      h+='<div class="sr-row" data-id="'+g.id+'" data-s="'+esc(cnPlain(g.name+" "+(g.sup||"")))+'"><div><b>'+esc(g.name)+(u===null?'<span class="tag">bez ceny</span>':'')+'</b><span class="small">'+info.join(" · ")+(g.note?'<br>'+esc(g.note):'')+'</span></div><button class="x" data-act="sEdit">Upraviť</button></div>';
+      var egg=eggG(g.name)&&eggItem()&&eggItem()!==g;
+      h+='<div class="sr-row" data-id="'+g.id+'" data-s="'+esc(cnPlain(g.name+" "+(g.sup||"")))+'"><div><b>'+esc(g.name)+(egg?'<span class="tag">nepoužíva sa</span>':u===null?'<span class="tag">bez ceny</span>':'')+'</b>'+(egg?'<span class="small">Vajcia, žĺtky a bielky sa počítajú cez „'+esc(eggItem().name)+'“. <button class="linkbtn" data-act="sDel">Zmazať</button><br></span>':'')+'<span class="small">'+info.join(" · ")+(g.note?'<br>'+esc(g.note):'')+'</span></div><button class="x" data-act="sEdit">Upraviť</button></div>';
     });
     el.innerHTML=h+'</div>';
     srFilter();
