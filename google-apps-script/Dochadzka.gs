@@ -1,5 +1,5 @@
 /**
- * Macka. – dochádzka, výplaty a záloha
+ * Macka. – dochádzka, výplaty, záloha a ceny surovín
  *
  * Skript beží v Google účte, kde je priečinok „Mackine Torty“ s dochádzkou
  * (každý zamestnanec má vlastný Sheet, v ňom hárky Január…December).
@@ -29,6 +29,10 @@
  *  3. Hore vyber funkciu „zapniZalohu“ → Spustiť → povoľ prístup.
  *     Skript musí bežať pod Google účtom, ktorý vlastní projekt Firebase.
  *  4. Nasadiť → Spravovať nasadenia → ceruzka → Nová verzia → Nasadiť.
+ *
+ * CENY SUROVÍN: appka (Náklady → Suroviny → Prepojená tabuľka) pošle ID Google tabuľky
+ * s cenami a skript vráti obsah hárka „Suroviny“ (alebo prvého hárka). Tabuľka musí byť
+ * prístupná účtu, pod ktorým skript beží.
  *
  * Pravidlá výpočtu (jeden riadok = jeden deň):
  *  - odpracovaný deň = riadok s časom v stĺpci „Celkový čas“ (E), bez dovolenky/paragrafu
@@ -78,12 +82,13 @@ function handle_(p) {
   try {
     var t = PropertiesService.getScriptProperties().getProperty('TOKEN');
     if (!t || p.token !== t) out = { ok: false, error: 'kluc' };
-    else if (p.action === 'ping') out = { ok: true, folder: folder_().getName(), ver: 3 };
+    else if (p.action === 'ping') out = { ok: true, folder: folder_().getName(), ver: 4 };
     else if (p.action === 'read') out = read_(p);
     else if (p.action === 'mail') out = mail_(p);
     else if (p.action === 'zalohaNow') out = zalohuj();
     else if (p.action === 'zalohaList') out = zalohaList_();
     else if (p.action === 'zalohaGet') out = zalohaGet_(p);
+    else if (p.action === 'suroviny') out = suroviny_(p);
     else out = { ok: false, error: 'neznama akcia' };
   } catch (err) {
     out = { ok: false, error: String(err && err.message || err) };
@@ -201,6 +206,16 @@ var ZALOHY = 'Macka. zálohy';
 var ZALOHY_DNI = 30;
 
 // Spusti raz: nastaví nočnú zálohu (o 3:00) a hneď jednu urobí.
+// Ceny surovín: vráti zobrazené hodnoty hárka „Suroviny“ z tabuľky s daným ID.
+function suroviny_(p) {
+  var id = String(p.id || '').trim();
+  if (!/^[a-zA-Z0-9_-]{20,}$/.test(id)) throw new Error('Chýba alebo je zlý odkaz na tabuľku surovín.');
+  var ss;
+  try { ss = SpreadsheetApp.openById(id); } catch (x) { throw new Error('Tabuľku surovín sa nepodarilo otvoriť (skontroluj odkaz a prístup).'); }
+  var sh = ss.getSheetByName('Suroviny') || ss.getSheets()[0];
+  return { ok: true, name: ss.getName(), rows: sh.getDataRange().getDisplayValues() };
+}
+
 function zapniZalohu() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'zalohuj') ScriptApp.deleteTrigger(t);

@@ -329,7 +329,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(t==="vianoce")render();
     if(t==="vyplaty")renderV();
     if(t==="zaloha")openZ();
-    if(t==="naklady-suroviny"){srEdit=null;renderSR()}
+    if(t==="naklady-suroviny"){srEdit=null;renderSR();srSync()}
+    if(t==="vianoce")srSync();
     if(t==="recepty"){rcView=rcNext||null;rcNext=null;rcDraft=null;renderR()}
     if(t.indexOf("cennik-")===0){cnEdit=null;renderC(t.slice(7))}
     window.scrollTo(0,0);
@@ -848,19 +849,21 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   });
 
   /* ---- Suroviny (katalóg) ---- */
-  // Údaje: apps/suroviny {items:[{id,name,unit:kg|l|ks,pack,price,sup,note}]}; price = € bez DPH za balenie (pack v jednotke unit)
+  // Údaje: apps/suroviny {sheet, sync, items:[{id,name,unit:kg|l|ks,pack,price,sup,note}]}; price = € bez DPH za balenie (pack v jednotke unit)
+  // sheet = ID Google tabuľky s cenami (načíta ju Apps Script, akcia „suroviny“, najviac raz za hodinu), sync = čas posledného načítania
   // Norma je v recepte: recept.batch = ks z dávky (chýba = 1), recept.items[{name,qty,unit:g|kg|ml|l|ks,ingId}]; koláč vo Vianociach má recId (staré cake.items ostávajú ako záloha)
+  var srSyncing=false,srSyncErr="",srTry=0;
   var SR={items:[]},srGot=false,srUn=null,srEdit=null,srQ="",srPend=false,lastSR="";
   var srRef=cfgOk?doc(db,"apps","suroviny"):null;
   var UF={kg:["g",1000],l:["ml",1000],ks:["ks",1]};
   function startSR(){
     if(srUn||!cfgOk)return;
     srUn=onSnapshot(srRef,function(snap){
-      SR={items:snap.exists()?(snap.data().items||[]):[]};lastSR=ser(SR);
-      srGot=true;srRefresh();refresh();
+      var d=snap.exists()?snap.data():{};SR={items:d.items||[],sheet:d.sheet||"",sync:d.sync||""};lastSR=ser(SR);
+      srGot=true;srRefresh();refresh();srSync();
     },fail);
   }
-  function stopSR(){if(srUn)srUn();srUn=null;srGot=false;srEdit=null;SR={items:[]};lastSR=""}
+  function stopSR(){if(srUn)srUn();srUn=null;srGot=false;srEdit=null;SR={items:[]};lastSR="";srSyncing=false;srSyncErr="";srTry=0}
   function srSave(){if(!srGot)return;var j=ser(SR);if(j===lastSR)return;lastSR=j;setDoc(srRef,JSON.parse(j)).catch(fail)}
   function e2(n){return Number(n||0).toLocaleString("sk-SK",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"}
   function fmtN(n){return String(Math.round(n*1000)/1000).replace(".",",")}
@@ -936,8 +939,13 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var el=document.getElementById("sr-body");if(!el)return;
     if(!srGot){el.innerHTML='<div class="empty">Načítavam údaje…</div>';return}
     var h='<details class="card"'+(SR.items.length?'':' open')+'><summary>Pridať surovinu</summary>'+srForm()+'<div class="form"><button class="btn" data-act="sAdd">Pridať</button></div></details>';
+    var lnk='<div class="card"><h3>Prepojená tabuľka s cenami</h3><div class="small">Ceny sa automaticky načítajú z Google tabuľky (najviac raz za hodinu). Ceny meň v tabuľke, inak ich ďalšie načítanie prepíše.</div>';
+    lnk+='<div class="form"><input class="grow" id="srSheet" placeholder="Odkaz na Google tabuľku" value="'+esc(SR.sheet?"https://docs.google.com/spreadsheets/d/"+SR.sheet+"/edit":"")+'"><button class="btn ghost" data-act="sSheet">Uložiť</button>'+(SR.sheet?'<button class="btn" data-act="sSync"'+(srSyncing?' disabled':'')+'>'+(srSyncing?'Načítavam…':'Načítať teraz')+'</button>':'')+'</div>';
+    if(!vGsOn())lnk+='<div class="small warn">Najprv nastav Google skript vo Výplatách (URL a kľúč).</div>';
+    else if(SR.sheet)lnk+='<div class="small">'+(srSyncErr?'<span class="warn">Načítanie zlyhalo: '+esc(srSyncErr)+'</span>':SR.sync?'Naposledy načítané: '+esc(new Date(SR.sync).toLocaleString("sk-SK",{day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"})):'Zatiaľ nenačítané.')+'</div>';
+    lnk+='</div>';
     var imp='<div class="card"><h3>Nahrať ceny zo súboru</h3><div class="small">Google Sheets → Súbor → Stiahnuť → CSV. Suroviny sa spárujú podľa názvu, prázdne bunky nič neprepíšu, nové suroviny pribudnú.</div><div class="form"><input type="file" id="srFile" accept=".csv,text/csv"></div></div>';
-    if(!SR.items.length){el.innerHTML=h+imp+'<div class="empty"><strong>Katalóg je prázdny.</strong>Pridaj suroviny tu alebo ich naraz prenes z noriem (Vianoce 2026 → Koláče → Pridať všetky do katalógu).</div>';return}
+    if(!SR.items.length){el.innerHTML=h+lnk+imp+'<div class="empty"><strong>Katalóg je prázdny.</strong>Pridaj suroviny tu alebo ich naraz prenes z noriem (Vianoce 2026 → Koláče → Pridať všetky do katalógu).</div>';return}
     h+='<div class="form"><input class="grow" id="srQ" type="search" placeholder="Hľadať surovinu" value="'+esc(srQ)+'"></div><div class="card" id="srList">';
     SR.items.slice().sort(function(a,b){return a.name.localeCompare(b.name,"sk")}).forEach(function(g){
       if(srEdit===g.id){
@@ -951,7 +959,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       var egg=eggG(g.name)&&eggItem()&&eggItem()!==g;
       h+='<div class="sr-row" data-id="'+g.id+'" data-s="'+esc(cnPlain(g.name+" "+(g.sup||"")))+'"><div><b>'+esc(g.name)+(egg?'<span class="tag">nepoužíva sa</span>':u===null?'<span class="tag">bez ceny</span>':'')+'</b>'+(egg?'<span class="small">Vajcia, žĺtky a bielky sa počítajú cez „'+esc(eggItem().name)+'“. <button class="linkbtn" data-act="sDel">Zmazať</button><br></span>':'')+'<span class="small">'+info.join(" · ")+(g.note?'<br>'+esc(g.note):'')+'</span></div><button class="x" data-act="sEdit">Upraviť</button></div>';
     });
-    el.innerHTML=h+'</div>'+imp;
+    el.innerHTML=h+'</div>'+lnk+imp;
     srFilter();
   }
   function srFilter(){var q=cnPlain(srQ.trim());document.querySelectorAll("#srList .sr-row[data-s]").forEach(function(r){r.hidden=!!q&&r.dataset.s.indexOf(q)<0})}
@@ -973,8 +981,10 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     return rows;
   }
   function csvNum(v){v=String(v||"").replace(/[^0-9,.\-]/g,"").replace(",",".");if(!v)return null;var n=parseFloat(v);return isNaN(n)?null:n}
-  function srImport(text){
-    var rows=csvRows(text),hi=-1;
+  function srImport(text){srApply(csvRows(text),true)}
+  // rows = tabuľka (pole riadkov); ask = pýtať sa pred uložením (CSV), inak ticho (automatické načítanie)
+  function srApply(rows,ask){
+    var hi=-1;
     rows.forEach(function(r,i){if(hi<0&&cnPlain(String(r[0]||"").trim())==="surovina")hi=i});
     if(hi<0)throw new Error("Chýba riadok s hlavičkou „Surovina“.");
     var col={};rows[hi].forEach(function(c,i){var k=cnPlain(String(c).trim());
@@ -994,10 +1004,24 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       if(g){if(Object.keys(d).some(function(k){return g[k]!==d[k]})){ops.push([g,d]);up++}}
       else{ops.push([null,{id:uid(),name:name,unit:d.unit||"kg",pack:d.pack||1,price:d.price||0,sup:d.sup||"",note:d.note||""}]);nw++}
     });
-    if(!ops.length){toast("Nič nové na nahratie, katalóg už sedí.");return}
-    if(!confirm("Nahrať ceny zo súboru?\nAktualizuje sa: "+up+", pribudne: "+nw+"."))return;
+    if(!ops.length){if(ask)toast("Nič nové na nahratie, katalóg už sedí.");return 0}
+    if(ask&&!confirm("Nahrať ceny zo súboru?\nAktualizuje sa: "+up+", pribudne: "+nw+"."))return 0;
     ops.forEach(function(o){if(o[0])Object.keys(o[1]).forEach(function(k){o[0][k]=o[1][k]});else SR.items.push(o[1])});
-    srSave();linkAll();renderSR();toast("Ceny nahraté (aktualizované "+up+", nové "+nw+")");
+    srSave();linkAll();renderSR();refresh();toast((ask?"Ceny nahraté":"Ceny zo Sheetu načítané")+" (aktualizované "+up+", nové "+nw+")");
+    return ops.length;
+  }
+  function sheetId(v){v=String(v||"").trim();var m=v.match(/\/d\/([a-zA-Z0-9_-]{20,})/);return m?m[1]:(/^[a-zA-Z0-9_-]{20,}$/.test(v)?v:"")}
+  // automatické načítanie cien z prepojenej tabuľky cez Apps Script (najviac raz za hodinu, pri chybe skúsi znova o 10 min)
+  function srSync(force){
+    if(!srGot||!SR.sheet||srSyncing||!vGotCfg||!vGsOn())return;
+    if(!force&&SR.sync&&Date.now()-Date.parse(SR.sync)<3600e3)return;
+    if(!force&&srTry&&Date.now()-srTry<600e3)return;
+    srSyncing=true;srTry=Date.now();if(force)renderSR();
+    vApi({action:"suroviny",id:SR.sheet}).then(function(d){
+      if(!Array.isArray(d.rows))throw new Error("Skript nevrátil tabuľku.");
+      srSyncErr="";srApply(d.rows,false);SR.sync=new Date().toISOString();srSave();
+      if(force)toast("Ceny zo Sheetu sú aktuálne");
+    }).catch(function(e){srSyncErr=e.message||"chyba"}).then(function(){srSyncing=false;renderSR()});
   }
   document.getElementById("sr-body").addEventListener("change",function(e){
     if(e.target.id!=="srFile"||!srGot)return;
@@ -1010,6 +1034,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   document.getElementById("sr-body").addEventListener("click",function(e){
     var t=e.target.closest("button");if(!t||!t.dataset.act||!srGot)return;
     var a=t.dataset.act,row=t.closest(".sr-row"),id=row&&row.dataset.id,g=id&&ing(id);
+    if(a==="sSheet"){var v=document.getElementById("srSheet").value,si=sheetId(v);if(v.trim()&&!si){alert("Toto nevyzerá ako odkaz na Google tabuľku.");return}SR.sheet=si;SR.sync="";srSyncErr="";srTry=0;srSave();renderSR();if(si)srSync(true);toast(si?"Tabuľka prepojená":"Prepojenie zrušené");return}
+    if(a==="sSync"){srTry=0;srSync(true);return}
     if(a==="sAdd"){
       var d=srRead(t.closest(".card"));if(!d.name){alert("Zadaj názov suroviny.");return}
       if(ingByName(d.name)){alert("Surovina s týmto názvom už v katalógu je.");return}
@@ -1200,7 +1226,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(vStarted||!cfgOk)return;vStarted=true;
     vUnsubs.push(onSnapshot(vCfgRef,function(snap){
       if(!vCfgDirty){var cd=snap.exists()?snap.data():{};VS.people=cd.people||[];VS.gs={url:(cd.gs&&cd.gs.url)||"",token:(cd.gs&&cd.gs.token)||""}}
-      vGotCfg=true;vRefresh();
+      vGotCfg=true;vRefresh();srSync();
     },fail));
     vUnsubs.push(onSnapshot(vMonthsCol,function(snap){
       var o={};snap.forEach(function(d){o[d.id]=d.data()});
