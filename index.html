@@ -131,6 +131,13 @@ details.card summary{cursor:pointer;font-weight:700}
 .cn-item summary{cursor:pointer;font-weight:700;color:var(--berry)}
 .cn-v{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 .cn-v .vgrid{margin-top:4px}
+button.row.kb{width:100%;font:inherit;text-align:left;border:0;cursor:pointer;background:var(--xmas)}
+button.row.kb .kt{display:block;font-family:"Fraunces",Georgia,serif;font-size:1.15rem}
+button.row.kb .small{display:block;color:var(--tile-ink);opacity:.8;font-weight:600}
+button.back{font:inherit;cursor:pointer;margin:8px 0 4px}
+.kh{margin:4px 0 2px;font-size:1.4rem}
+.kedit{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.kedit summary{cursor:pointer;font-weight:700;color:var(--berry)}
 table.nw td.r,table.nw th.r{white-space:nowrap}
 .sr-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .sr-row:last-child{border-bottom:0}
@@ -333,7 +340,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   window.addEventListener("hashchange",show);
 
   /* ---- Vianoce 2026 ---- */
-  var tab="boxes",editId=null,S={cakes:[],boxes:[],orders:[],pair:105,rez:0};
+  var tab="boxes",editId=null,kGroup=null,kCake=null,kEd=false,S={cakes:[],boxes:[],orders:[],pair:105,rez:0};
   var gotCfg=false,gotOrders=false,lastCfg="",lastOrders={},seeding=false,started=false,unsubs=[],pending=false;
   var cfgOk=!!(firebaseConfig&&firebaseConfig.apiKey&&String(firebaseConfig.apiKey).indexOf("VLOZ")!==0);
   var app,auth,db,cfgRef,ordersCol;
@@ -497,43 +504,60 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function viewCakes(){
     linkAll();
-    var h='<div class="form"><input class="grow" id="newCake" placeholder="Názov koláča"><button class="btn" data-act="addCake">Pridať koláč</button></div>';
+    if(kCake&&!cake(kCake))kCake=null;
+    if(kGroup&&kGroup!=="other"&&!box(kGroup))kGroup=null;
+    if(kCake)return viewCakeDetail(cake(kCake));
+    if(kGroup)return viewCakeList();
+    var h='',others=S.cakes.filter(function(c){return !inBox(c.id)});
+    S.boxes.forEach(function(b){
+      var t=0,miss=0,n=0;b.comp.forEach(function(x){var c=cake(x.cakeId);if(!c)return;n++;var cc=cakeCost(c);t+=cc.pc*x.qty;if(cc.miss||!c.items.length)miss++});
+      h+='<button class="row kb" data-act="kOpen" data-g="'+b.id+'"><span><span class="kt">'+esc(b.name)+'</span><span class="small">'+n+' koláčov · suroviny '+e2(t)+' · cena '+e2(b.price)+(miss?' · <span class="warn">'+miss+' bez úplnej ceny</span>':'')+'</span></span><span aria-hidden="true">›</span></button>';
+    });
+    if(others.length)h+='<button class="row kb" data-act="kOpen" data-g="other"><span><span class="kt">Ostatné koláče</span><span class="small">'+others.length+' koláčov mimo krabičiek</span></span><span aria-hidden="true">›</span></button>';
     var off={};S.cakes.forEach(function(c){c.items.forEach(function(it){if(!ingOf(it))off[cnPlain(it.name.trim())]=1})});
     var nOff=Object.keys(off).length;
     if(nOff)h+='<div class="card"><h3>Suroviny mimo katalógu</h3><div class="small">'+nOff+' surovín z noriem nie je v <a href="#naklady/suroviny">katalógu surovín</a>, preto nemajú cenu.</div><div class="form"><button class="btn" data-act="allToCat">Pridať všetky do katalógu</button></div></div>';
-    h+='<datalist id="srList">'+SR.items.map(function(g){return '<option value="'+esc(g.name)+'">'}).join("")+'</datalist>';
-    S.cakes.forEach(function(c){
-      var cc=cakeCost(c),bt=batchOf(c);
-      h+='<div class="card" data-id="'+c.id+'"><div class="line" style="border:0"><h3>'+esc(c.name)+'</h3><button class="x" data-act="delCake" aria-label="Zmazať koláč">Zmazať</button></div>';
-      h+='<div class="small">'+(inBox(c.id)?"V krabičke":"Samostatne")+' · norma na 1 dávku</div><div class="form" style="align-items:center;margin:4px 0 6px"><span class="small">Z dávky je</span><input class="num c-batch" inputmode="numeric" value="'+bt+'" aria-label="Počet kusov z dávky"><span class="small">ks</span></div>';
-      c.items.forEach(function(it,i){
-        var g=ingOf(it),x=itemCost(it),tg='';
-        if(!g)tg='<span class="tag">mimo katalógu</span> <button class="linkbtn" data-act="toCat" data-i="'+i+'">Do katalógu</button>';
-        else if(x===null)tg='<span class="tag">'+(unitCost(g)===null?'bez ceny':'iná jednotka')+'</span>';
-        h+='<div class="line"><span>'+esc(g?g.name:it.name)+tg+'</span><span>'+esc(it.qty)+' '+esc(it.unit)+(x!==null?' <span class="small">· '+e2(x)+'</span>':'')+' <button class="x" data-act="delIng" data-i="'+i+'" aria-label="Zmazať surovinu">✕</button></span></div>';
-      });
-      if(c.items.length)h+='<div class="small" style="margin-top:6px"><strong>Suroviny: '+e2(cc.batch)+' za dávku · '+e2(cc.pc)+'/ks</strong>'+(cc.miss?' <span class="warn">('+cc.miss+' bez ceny)</span>':'')+'</div>';
-      h+='<div class="form"><input class="grow i-name" list="srList" placeholder="Surovina"><input class="num i-qty" inputmode="decimal" placeholder="Množstvo"><select class="i-unit"><option>g</option><option>kg</option><option>ml</option><option>l</option><option>ks</option></select><button class="btn" data-act="addIng">Pridať surovinu</button></div></div>';
-    });
+    h+='<div class="card"><h3>Nový koláč</h3><div class="form"><input class="grow" id="newCake" placeholder="Názov koláča"><button class="btn" data-act="addCake">Pridať koláč</button></div><div class="small">Nový koláč pribudne medzi Ostatné koláče.</div></div>';
     h+='<div class="card"><h3>Nahrať normy zo súboru</h3><div class="small">Súbor macka-normy (JSON). Prepíše normy len pri koláčoch, ktoré sú v súbore. Objednávky ostanú nezmenené.</div><div class="form"><input type="file" id="normsFile" accept="application/json,.json"></div></div>';
     return h;
   }
-  function viewOrders(){
-    var e=S.orders.filter(function(o){return o.id===editId})[0]||null;
-    function q(kind,id){var v="";if(e)e.lines.forEach(function(l){if(l.kind===kind&&l.id===id)v=l.qty});return v}
-    var mixL=e?e.lines.filter(function(l){return l.kind==="mix"})[0]:null;
-    var h='<div class="card"><h3>'+(e?'Upraviť objednávku č. '+e.no:'Nová objednávka')+'</h3><div class="form"><input class="grow" id="oName" placeholder="Meno a priezvisko" value="'+(e?esc(e.name):'')+'"><input class="grow" id="oContact" placeholder="Telefónne číslo" value="'+(e?esc(e.contact):'')+'"></div>';
-    S.boxes.forEach(function(b){h+='<div class="line"><span>'+esc(b.name)+'</span><input class="num o-qty" data-kind="box" data-id="'+b.id+'" inputmode="numeric" placeholder="ks" value="'+q("box",b.id)+'"></div>'});
-    h+='<div class="line"><span>Mix koláčov</span><input class="num o-qty" data-kind="mix" data-id="mix" inputmode="numeric" placeholder="ks" value="'+q("mix","mix")+'"></div><div class="form"><input class="grow" id="oMix" placeholder="Poznámka k mixu (čo v ňom má byť)" value="'+esc(mixL&&mixL.note||"")+'"></div><div class="form"><input class="num" id="oPrice" inputmode="decimal" placeholder="Cena €" value="'+(e&&e.price?e.price:"")+'"><input class="grow" id="oNote" placeholder="Poznámka (napr. odber)" value="'+esc(e&&e.note||"")+'"></div>';
-    h+='<div class="form"><button class="btn" data-act="addOrder">'+(e?'Uložiť zmeny':'Uložiť objednávku')+'</button>'+(e?'<button class="x" data-act="cancelEdit">Zrušiť</button>':'')+'</div></div>';
-    if(!S.orders.length)h+='<div class="empty"><strong>Zatiaľ žiadne objednávky.</strong></div>';
-    S.orders.forEach(function(o){
-      var bl=[],cl=[];
-      o.lines.forEach(function(l){if(l.kind==="mix"){bl.push('Mix koláčov × '+l.qty+(l.note?' ('+esc(l.note)+')':''));return}var c=l.kind==="box"?box(l.id):cake(l.id);if(!c)return;(l.kind==="box"?bl:cl).push(esc(c.name)+' × '+l.qty)});
-      var ls=bl.join(', ')+(bl.length&&cl.length?'<br>':'')+(cl.length?'Mix koláčov: '+cl.join(', '):'');
-      var pr=o.price||boxPrice(o.lines);
-      h+='<div class="card" data-id="'+o.id+'"><div class="line" style="border:0"><h3>#'+o.no+' '+esc(o.name)+'</h3><span><button class="x" data-act="editOrder" aria-label="Upraviť objednávku">Upraviť</button><button class="x" data-act="delOrder" aria-label="Zmazať objednávku">Zmazať</button></span></div><div class="small">'+esc(o.contact)+'</div><div>'+ls+'</div>'+(o.note?'<div class="small">Poznámka: '+esc(o.note)+'</div>':'')+(pr?'<div class="small">Cena spolu: '+eur(pr)+' s DPH</div>':'')+(phone(o.contact)?'<div class="form"><a class="btn" href="sms:'+phone(o.contact)+'?&body='+encodeURIComponent(smsText(o))+'">Poslať SMS</a></div>':'')+'</div>';
+  function viewCakeList(){
+    var b=kGroup==="other"?null:box(kGroup),list=[];
+    if(b)b.comp.forEach(function(x){var c=cake(x.cakeId);if(c)list.push([c,x.qty])});
+    else S.cakes.forEach(function(c){if(!inBox(c.id))list.push([c,0])});
+    var h='<button class="back" data-act="kBack">‹ Krabičky</button><h3 class="kh">'+(b?esc(b.name):'Ostatné koláče')+'</h3>';
+    if(b)h+='<div class="small">'+esc(b.desc||"")+'</div>';
+    if(!list.length)return h+'<div class="empty"><strong>Žiadne koláče.</strong></div>';
+    var tot=0;
+    list.forEach(function(r){
+      var c=r[0],cc=cakeCost(c),bad=!c.items.length?'bez normy':cc.miss?'chýba cena':'';tot+=cc.pc*r[1];
+      h+='<button class="row kb" data-act="kCake" data-c="'+c.id+'"><span><span class="kt">'+esc(c.name)+'</span><span class="small">'+(r[1]?r[1]+' ks v krabičke':'')+(c.items.length?(r[1]?' · ':'')+e2(cc.pc)+'/ks':'')+(bad?' <span class="tag">'+bad+'</span>':'')+'</span></span><span aria-hidden="true">›</span></button>';
     });
+    if(b)h+='<div class="card"><div class="line" style="border:0"><strong>Suroviny na 1 krabičku</strong><strong>'+e2(tot)+'</strong></div><div class="line" style="border:0"><span>Predajná cena</span><span>'+e2(b.price)+'</span></div></div>';
+    return h;
+  }
+  function viewCakeDetail(c){
+    var cc=cakeCost(c),bt=batchOf(c);
+    var h='<button class="back" data-act="kBack">‹ '+(kGroup&&kGroup!=="other"&&box(kGroup)?esc(box(kGroup).name):'Ostatné koláče')+'</button>';
+    h+='<div class="card" data-id="'+c.id+'"><h3>'+esc(c.name)+'</h3>';
+    if(!c.items.length)h+='<div class="small">Koláč zatiaľ nemá normu. Doplň ju nižšie v „Upraviť normu“.</div>';
+    else{
+      h+='<table class="nw"><thead><tr><th>Surovina</th><th class="r">Na 1 ks</th><th class="r">Cena</th></tr></thead><tbody>';
+      c.items.forEach(function(it,i){
+        var g=ingOf(it),x=itemCost(it),b=BASE[it.unit]||[it.unit,1],tg='';
+        if(!g)tg=' <span class="tag">mimo katalógu</span> <button class="linkbtn" data-act="toCat" data-i="'+i+'">Do katalógu</button>';
+        else if(x===null)tg=' <span class="tag">'+(unitCost(g)===null?'bez ceny':'iná jednotka')+'</span>';
+        h+='<tr><td>'+esc(g?g.name:it.name)+tg+(g&&unitCost(g)!==null?'<div class="small">'+e2(unitCost(g)*UF[g.unit][1])+'/'+g.unit+'</div>':'')+'</td><td class="r">'+fmt(num(it.qty)*b[1]/bt,b[0])+'</td><td class="r">'+(x!==null?e2(x/bt):'—')+'</td></tr>';
+      });
+      h+='</tbody><tfoot><tr><td colspan="2">Spolu za 1 koláč</td><td class="r">'+e2(cc.pc)+'</td></tr></tfoot></table>';
+      h+='<div class="small">'+(bt>1?'Dávka '+bt+' ks: '+e2(cc.batch)+'. ':'')+(cc.miss?'<span class="warn">'+cc.miss+' surovín bez ceny, cena je preto nižšia.</span>':'')+'</div>';
+    }
+    h+='<details class="kedit"'+(kEd||!c.items.length?' open':'')+'><summary>Upraviť normu</summary>';
+    h+='<div class="form" style="align-items:center"><span class="small">Norma je na 1 dávku, z dávky je</span><input class="num c-batch" inputmode="numeric" value="'+bt+'" aria-label="Počet kusov z dávky"><span class="small">ks</span></div>';
+    h+='<datalist id="srList">'+SR.items.map(function(g){return '<option value="'+esc(g.name)+'">'}).join("")+'</datalist>';
+    c.items.forEach(function(it,i){var g=ingOf(it);h+='<div class="line"><span>'+esc(g?g.name:it.name)+'</span><span>'+esc(it.qty)+' '+esc(it.unit)+' <button class="x" data-act="delIng" data-i="'+i+'" aria-label="Zmazať surovinu">✕</button></span></div>'});
+    h+='<div class="form"><input class="grow i-name" list="srList" placeholder="Surovina"><input class="num i-qty" inputmode="decimal" placeholder="Množstvo"><select class="i-unit"><option>g</option><option>kg</option><option>ml</option><option>l</option><option>ks</option></select><button class="btn" data-act="addIng">Pridať surovinu</button></div>';
+    h+='<div class="form"><button class="x" data-act="delCake">Zmazať koláč</button></div></details></div>';
     return h;
   }
   function viewMargin(){
@@ -589,15 +613,18 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   document.getElementById("vianoce").addEventListener("click",function(e){
     var t=e.target.closest("button");if(!t)return;
-    if(t.dataset.tab){tab=t.dataset.tab;editId=null;render();return}
+    if(t.dataset.tab){tab=t.dataset.tab;editId=null;kGroup=null;kCake=null;render();return}
     var a=t.dataset.act;if(!a)return;
     var card=t.closest(".card"),id=card&&card.dataset.id;
+    if(a==="kOpen"){kGroup=t.dataset.g;kCake=null;render();window.scrollTo(0,0);return}
+    if(a==="kCake"){kCake=t.dataset.c;kEd=false;render();window.scrollTo(0,0);return}
+    if(a==="kBack"){kEd=false;if(kCake)kCake=null;else kGroup=null;render();window.scrollTo(0,0);return}
     if(a==="backup"){doBackup();return}
     else if(a==="addCake"){var n=document.getElementById("newCake").value.trim();if(!n)return;S.cakes.push({id:uid(),name:n,items:[],single:true})}
     else if(a==="delCake"){
       if(inBox(id)){alert("Tento koláč je súčasťou krabičky, nedá sa zmazať.");return}
       if(!confirm("Zmazať koláč aj jeho normu?"))return;
-      S.cakes=S.cakes.filter(function(x){return x.id!==id});
+      S.cakes=S.cakes.filter(function(x){return x.id!==id});kCake=null;
       S.orders.forEach(function(o){o.lines=o.lines.filter(function(l){return !(l.kind==="cake"&&l.id===id)})});
     }
     else if(a==="addIng"){var nm=card.querySelector(".i-name").value.trim(),q=num(card.querySelector(".i-qty").value);if(!nm||!q)return;var g=ingByName(nm),ni={name:g?g.name:nm,qty:q,unit:card.querySelector(".i-unit").value};if(g)ni.ingId=g.id;cake(id).items.push(ni)}
@@ -666,6 +693,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     };
     r.readAsText(f);
   });
+  document.getElementById("v-body").addEventListener("toggle",function(e){if(e.target.classList&&e.target.classList.contains("kedit"))kEd=e.target.open},true);
   document.getElementById("v-body").addEventListener("focusout",function(){
     if(!pending)return;
     setTimeout(function(){if(inField())return;pending=false;render()},600);
