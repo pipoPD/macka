@@ -490,6 +490,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function viewCakes(){
     var h='<div class="form"><input class="grow" id="newCake" placeholder="Názov koláča"><button class="btn" data-act="addCake">Pridať koláč</button></div>';
+    h+='<div class="card"><h3>Nahrať normy zo súboru</h3><div class="small">Súbor macka-normy (JSON). Prepíše normy len pri koláčoch, ktoré sú v súbore. Objednávky ostanú nezmenené.</div><div class="form"><input type="file" id="normsFile" accept="application/json,.json"></div></div>';
     S.cakes.forEach(function(c){
       h+='<div class="card" data-id="'+c.id+'"><div class="line" style="border:0"><h3>'+esc(c.name)+'</h3><button class="x" data-act="delCake" aria-label="Zmazať koláč">Zmazať</button></div>';
       h+='<div class="small">'+(inBox(c.id)?"V krabičke":"Samostatne")+' · norma na 1 kus:</div>';
@@ -581,6 +582,22 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(e.key==="Enter"&&e.target.id==="newCake"){e.preventDefault();var b=document.querySelector('[data-act="addCake"]');if(b)b.click()}
   });
   document.getElementById("vianoce").addEventListener("change",function(e){
+    if(e.target.id==="normsFile"){
+      var nf=e.target.files[0];if(!nf)return;
+      var nr=new FileReader();
+      nr.onload=function(){
+        try{
+          var d=JSON.parse(nr.result);
+          if(!d||d.app!=="macka-normy"||!d.norms||typeof d.norms!=="object")throw new Error("zlý súbor");
+          var ids=Object.keys(d.norms).filter(function(id){return cake(id)});
+          if(!ids.length)throw new Error("žiadny koláč");
+          if(!confirm("Nahrať normy pre "+ids.length+" koláčov? Ich doterajšie normy sa nahradia."))return;
+          ids.forEach(function(id){cake(id).items=d.norms[id].filter(function(it){return it&&it.name&&num(it.qty)>0}).map(function(it){return {name:String(it.name),qty:num(it.qty),unit:BASE[it.unit]?it.unit:"g"}})});
+          save();render();toast("Normy nahraté ("+ids.length+" koláčov)");
+        }catch(err){toast("Súbor s normami sa nepodarilo načítať")}
+      };
+      nr.readAsText(nf);return;
+    }
     if(e.target.id!=="restoreFile")return;
     var f=e.target.files[0];if(!f)return;
     var r=new FileReader();
