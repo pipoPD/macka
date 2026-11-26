@@ -34,7 +34,7 @@
 - Zmeny v `cennik-web.js` sa do existujúcej databázy nepremietnu samé (treba jednorazovú úpravu s príznakom ako `napSeed`/`kolDel`, alebo úpravu v appke).
 
 ## Sekcie (hlavné menu)
-Akcie (sezónne akcie, prebiehajúce hore, ukončené dole; zoznam `AKCIE` v kóde, ďalšie akcie podľa vzoru Vianoc) → Vianoce 2026 (hotové; tlačidlo Ukončiť akciu; Koláče: krabička → koláč → detail s normou z prepojeného receptu; nákupný zoznam s cenami a marža krabičiek), Recepty a normy (jedna sekcia, dlaždica Normy zrušená; zoznam podľa abecedy, detail s alergénmi, normou s cenami a postupom po častiach, úprava normy aj textu, nahratie zo súboru; fotky zatiaľ nie), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
+Akcie (sezónne akcie, prebiehajúce hore, ukončené dole; zoznam `AKCIE` v kóde, ďalšie akcie podľa vzoru Vianoc) → Vianoce 2026 (hotové; tlačidlo Ukončiť akciu; Koláče: krabička → koláč → detail s normou z prepojeného receptu, koláče sa nepridávajú a normy sa nenahrávajú (normy sú v Receptoch); Objednávky: nová/úprava, zoznam, SMS; nákupný zoznam s cenami a marža krabičiek), Recepty a normy (jedna sekcia, dlaždica Normy zrušená; zoznam podľa abecedy, detail s alergénmi, normou s cenami a postupom po častiach, úprava normy aj textu, nahratie zo súboru; fotky zatiaľ nie), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
 Kalendár a Správy boli zámerne odstránené, nevracať ich.
 
 ## Výplaty – výpočet

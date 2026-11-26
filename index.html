@@ -526,8 +526,24 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var off={};allNorms().forEach(function(n){n.items.forEach(function(it){if(!ingOf(it))off[cnPlain(it.name.trim())]=1})});
     var nOff=Object.keys(off).length;
     if(nOff)h+='<div class="card"><h3>Suroviny mimo katalógu</h3><div class="small">'+nOff+' surovín z noriem nie je v <a href="#naklady/suroviny">katalógu surovín</a>, preto nemajú cenu.</div><div class="form"><button class="btn" data-act="allToCat">Pridať všetky do katalógu</button></div></div>';
-    h+='<div class="card"><h3>Nový koláč</h3><div class="form"><input class="grow" id="newCake" placeholder="Názov koláča"><button class="btn" data-act="addCake">Pridať koláč</button></div><div class="small">Nový koláč pribudne medzi Ostatné koláče.</div></div>';
-    h+='<div class="card"><h3>Nahrať normy zo súboru</h3><div class="small">Súbor macka-normy (JSON). Prepíše normy len pri koláčoch, ktoré sú v súbore. Objednávky ostanú nezmenené.</div><div class="form"><input type="file" id="normsFile" accept="application/json,.json"></div></div>';
+    return h;
+  }
+  function viewOrders(){
+    var e=S.orders.filter(function(o){return o.id===editId})[0]||null;
+    function q(kind,id){var v="";if(e)e.lines.forEach(function(l){if(l.kind===kind&&l.id===id)v=l.qty});return v}
+    var mixL=e?e.lines.filter(function(l){return l.kind==="mix"})[0]:null;
+    var h='<div class="card"><h3>'+(e?'Upraviť objednávku č. '+e.no:'Nová objednávka')+'</h3><div class="form"><input class="grow" id="oName" placeholder="Meno a priezvisko" value="'+(e?esc(e.name):'')+'"><input class="grow" id="oContact" placeholder="Telefónne číslo" value="'+(e?esc(e.contact):'')+'"></div>';
+    S.boxes.forEach(function(b){h+='<div class="line"><span>'+esc(b.name)+'</span><input class="num o-qty" data-kind="box" data-id="'+b.id+'" inputmode="numeric" placeholder="ks" value="'+q("box",b.id)+'"></div>'});
+    h+='<div class="line"><span>Mix koláčov</span><input class="num o-qty" data-kind="mix" data-id="mix" inputmode="numeric" placeholder="ks" value="'+q("mix","mix")+'"></div><div class="form"><input class="grow" id="oMix" placeholder="Poznámka k mixu (čo v ňom má byť)" value="'+esc(mixL&&mixL.note||"")+'"></div><div class="form"><input class="num" id="oPrice" inputmode="decimal" placeholder="Cena €" value="'+(e&&e.price?e.price:"")+'"><input class="grow" id="oNote" placeholder="Poznámka (napr. odber)" value="'+esc(e&&e.note||"")+'"></div>';
+    h+='<div class="form"><button class="btn" data-act="addOrder">'+(e?'Uložiť zmeny':'Uložiť objednávku')+'</button>'+(e?'<button class="x" data-act="cancelEdit">Zrušiť</button>':'')+'</div></div>';
+    if(!S.orders.length)h+='<div class="empty"><strong>Zatiaľ žiadne objednávky.</strong></div>';
+    S.orders.forEach(function(o){
+      var bl=[],cl=[];
+      o.lines.forEach(function(l){if(l.kind==="mix"){bl.push('Mix koláčov × '+l.qty+(l.note?' ('+esc(l.note)+')':''));return}var c=l.kind==="box"?box(l.id):cake(l.id);if(!c)return;(l.kind==="box"?bl:cl).push(esc(c.name)+' × '+l.qty)});
+      var ls=bl.join(', ')+(bl.length&&cl.length?'<br>':'')+(cl.length?'Mix koláčov: '+cl.join(', '):'');
+      var pr=o.price||boxPrice(o.lines);
+      h+='<div class="card" data-id="'+o.id+'"><div class="line" style="border:0"><h3>#'+o.no+' '+esc(o.name)+'</h3><span><button class="x" data-act="editOrder" aria-label="Upraviť objednávku">Upraviť</button><button class="x" data-act="delOrder" aria-label="Zmazať objednávku">Zmazať</button></span></div><div class="small">'+esc(o.contact)+'</div><div>'+ls+'</div>'+(o.note?'<div class="small">Poznámka: '+esc(o.note)+'</div>':'')+(pr?'<div class="small">Cena spolu: '+eur(pr)+' s DPH</div>':'')+(phone(o.contact)?'<div class="form"><a class="btn" href="sms:'+phone(o.contact)+'?&body='+encodeURIComponent(smsText(o))+'">Poslať SMS</a></div>':'')+'</div>';
+    });
     return h;
   }
   function viewCakeList(){
@@ -632,7 +648,6 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(a==="kBack"){kEd=false;if(kCake)kCake=null;else kGroup=null;render();window.scrollTo(0,0);return}
     if(a==="backup"){doBackup();return}
     if(a==="vDone"){if(!ready())return;if(!S.done&&!confirm("Ukončiť akciu Vianoce 2026? Presunie sa medzi ukončené, údaje ostanú."))return;S.done=!S.done;save();render();toast(S.done?"Akcia ukončená":"Akcia znova otvorená");return}
-    else if(a==="addCake"){var n=document.getElementById("newCake").value.trim();if(!n)return;S.cakes.push({id:uid(),name:n,items:[],single:true})}
     else if(a==="delCake"){
       if(inBox(id)){alert("Tento koláč je súčasťou krabičky, nedá sa zmazať.");return}
       if(!confirm("Zmazať koláč aj jeho normu?"))return;
@@ -662,34 +677,10 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     else if(a==="delOrder"){if(!confirm("Zmazať objednávku?"))return;if(id===editId)editId=null;S.orders=S.orders.filter(function(x){return x.id!==id})}
     save();render();
   });
-  document.getElementById("vianoce").addEventListener("keydown",function(e){
-    if(e.key==="Enter"&&e.target.id==="newCake"){e.preventDefault();var b=document.querySelector('[data-act="addCake"]');if(b)b.click()}
-  });
   document.getElementById("vianoce").addEventListener("change",function(e){
     if(e.target.id==="vRez"){S.rez=+e.target.value||0;save();render();return}
     if(e.target.id==="vDph"){var dv=num(e.target.value);S.dph=dv>0&&dv<100?dv:0;save();render();return}
     if(e.target.classList.contains("c-rec")){var rk=cake(e.target.closest(".card").dataset.id);if(rk){if(e.target.value)rk.recId=e.target.value;else delete rk.recId;save();render()}return}
-    if(e.target.id==="normsFile"){
-      var nf=e.target.files[0];if(!nf)return;
-      var nr=new FileReader();
-      nr.onload=function(){
-        try{
-          var d=JSON.parse(nr.result);
-          if(!d||d.app!=="macka-normy"||!d.norms||typeof d.norms!=="object")throw new Error("zlý súbor");
-          var ids=Object.keys(d.norms).filter(function(id){return cake(id)});
-          if(!ids.length)throw new Error("žiadny koláč");
-          if(!confirm("Nahrať normy pre "+ids.length+" koláčov? Ich doterajšie normy sa nahradia."))return;
-          var recCh=false;
-          ids.forEach(function(id){
-            var nn=d.norms[id],arr=Array.isArray(nn)?nn:(nn&&nn.items)||[],ck=cake(id),tg=recOf(ck)||ck;if(tg!==ck)recCh=true;
-            tg.items=arr.filter(function(it){return it&&it.name&&num(it.qty)>0}).map(function(it){return {name:String(it.name),qty:num(it.qty),unit:BASE[it.unit]?it.unit:"g"}});
-            if(!Array.isArray(nn)){var bn=Math.round(num(nn&&nn.batch));if(bn>1)tg.batch=bn;else delete tg.batch}
-          });
-          linkAll();save();if(recCh)rcSave();render();toast("Normy nahraté ("+ids.length+" koláčov)");
-        }catch(err){toast("Súbor s normami sa nepodarilo načítať")}
-      };
-      nr.readAsText(nf);return;
-    }
     if(e.target.id!=="restoreFile")return;
     var f=e.target.files[0];if(!f)return;
     var r=new FileReader();
