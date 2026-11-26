@@ -22,7 +22,7 @@
 - Projekt `mackine-torty` (plán Spark, bez automatických záloh), SDK 10.14.1 z gstatic, offline cache zapnutá.
 - Prihlásenie e-mail + heslo, 2 účty. Firestore pravidlá povoľujú len tieto dva účty (cesta `apps/**`).
 - Dokumenty:
-  - `apps/vianoce2026`: `{cakes, boxes, pair, rez, dph}`; koláč `{id, name, recId, batch, items}` – `recId` = recept, z ktorého sa berie norma (staré `batch`/`items` v koláči sú len záloha spred presunu noriem do receptov), `rez` = rezerva na straty v %, `dph` = sadzba DPH na predaj v % (marža krabičiek sa ráta bez DPH); objednávky v `apps/vianoce2026/orders/{id}`: `{no, name, contact, lines[{kind: box|mix|cake, id, qty, note}], price, note}`
+  - `apps/vianoce2026`: `{cakes, boxes, pair, rez, dph, done}`; koláč `{id, name, recId, batch, items}` – `recId` = recept, z ktorého sa berie norma (staré `batch`/`items` v koláči sú len záloha spred presunu noriem do receptov), `rez` = rezerva na straty v %, `dph` = sadzba DPH na predaj v % (marža krabičiek sa ráta bez DPH); `done` = akcia ukončená (presunie sa v Akciách medzi Ukončené, údaje ostávajú); objednávky v `apps/vianoce2026/orders/{id}`: `{no, name, contact, lines[{kind: box|mix|cake, id, qty, note}], price, note}`
   - `apps/vyplaty`: `{people:[{id, name, type: emp|brig, rate, meal, sun, wkd, satp, sunp, dov, par, dovN, active, sheet, email}], gs:{url, token}}`; mesiace v `apps/vyplaty/months/{RRRR-MM}`: `{entries:{osobaId:{days, hours, sundays, sat, sunh, wkd, hol, vac, par, rew, candy, extra, note, imported, sent, rt:{rate,meal,sun,wkd,satp,sunp}} alebo {fixed: suma}}}`
   - Dochádzka: Apps Script `google-apps-script/Dochadzka.gs` (priečinok „Mackine Torty“ na Drive, Sheet na osobu, hárky podľa mesiacov). `people.sheet` = názov Sheetu, `gs` = URL a kľúč skriptu (len vo Firebase). Vracia aj obsah tabuľky cien surovín (akcia `suroviny`). Načíta dni, hodiny, nedele, hodiny v sobotu a v nedeľu, sviatok (zelená farba), dovolenku a paragraf (poznámka) a posiela výplatu e-mailom.
   - `apps/cennik`: `{src, napSeed, kolDel, torty:[…], kolace:[…], napoje:[…]}`; položka `{id, name, desc, valid, flav, note, vars:[{n, d, p, od, u, min}]}`
@@ -34,7 +34,7 @@
 - Zmeny v `cennik-web.js` sa do existujúcej databázy nepremietnu samé (treba jednorazovú úpravu s príznakom ako `napSeed`/`kolDel`, alebo úpravu v appke).
 
 ## Sekcie (hlavné menu)
-Vianoce 2026 (hotové; Koláče: krabička → koláč → detail s normou z prepojeného receptu; nákupný zoznam s cenami a marža krabičiek), Recepty a normy (jedna sekcia, dlaždica Normy zrušená; zoznam podľa abecedy, detail s alergénmi, normou s cenami a postupom po častiach, úprava normy aj textu, nahratie zo súboru; fotky zatiaľ nie), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
+Akcie (sezónne akcie, prebiehajúce hore, ukončené dole; zoznam `AKCIE` v kóde, ďalšie akcie podľa vzoru Vianoc) → Vianoce 2026 (hotové; tlačidlo Ukončiť akciu; Koláče: krabička → koláč → detail s normou z prepojeného receptu; nákupný zoznam s cenami a marža krabičiek), Recepty a normy (jedna sekcia, dlaždica Normy zrušená; zoznam podľa abecedy, detail s alergénmi, normou s cenami a postupom po častiach, úprava normy aj textu, nahratie zo súboru; fotky zatiaľ nie), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
 Kalendár a Správy boli zámerne odstránené, nevracať ich.
 
 ## Výplaty – výpočet

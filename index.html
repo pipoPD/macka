@@ -66,6 +66,9 @@ h2{font-size:1.7rem;margin-bottom:4px}
 .grid .tile:last-child:nth-child(odd){grid-column:1/-1;min-height:120px;flex-direction:row;align-items:center;justify-content:flex-start}
 .r-cennik{background:var(--lav)}
 .r-naklady{background:var(--sand)}
+.r-akcie{background:var(--xmas)}
+.r-done{opacity:.6}
+.a-h{margin:26px 0 0;font-size:1.1rem;color:var(--muted)}
 .tile:focus-visible,.back:focus-visible,.row:focus-visible{outline:3px solid var(--berry);outline-offset:3px}
 .back{display:inline-flex;align-items:center;gap:4px;margin-bottom:16px;padding:8px 16px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--berry);font-weight:700;text-decoration:none;box-shadow:var(--shadow)}
 .empty{margin-top:22px;padding:28px 20px;border:2px dashed var(--line);border-radius:20px;color:var(--muted);text-align:center}
@@ -194,9 +197,9 @@ table.nw td.r,table.nw th.r{white-space:nowrap}
     <header class="hero"><svg class="logo" aria-hidden="true"><use href="#logo"/></svg><div><h1>Macka.</h1></div></header>
     <a class="zban" id="zBanner" href="#zaloha" hidden></a>
     <nav class="grid" aria-label="Hlavné menu">
-      <a class="tile t-vianoce" href="#vianoce-2026">
+      <a class="tile t-vianoce" href="#akcie">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-1.5-3-5-4-5-1.5S10 8 12 8zM12 8c1.5-3 5-4 5-1.5S14 8 12 8z"/></svg>
-        <div><span>Vianoce 2026</span><small>Krabičky a objednávky</small></div>
+        <div><span>Akcie</span><small>Sezónne krabičky a objednávky</small></div>
       </a>
       <a class="tile t-recepty" href="#recepty">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M9 8h6M9 12h6"/></svg>
@@ -299,9 +302,16 @@ table.nw td.r,table.nw th.r{white-space:nowrap}
     <div id="sr-body"></div>
   </section>
 
-  <section id="vianoce" hidden>
+  <section id="akcie" hidden>
     <a class="back" href="#">‹ Späť</a>
+    <h2>Akcie</h2>
+    <div id="a-body"></div>
+  </section>
+
+  <section id="vianoce" hidden>
+    <a class="back" href="#akcie">‹ Späť</a>
     <h2>Vianoce 2026</h2>
+    <p class="sub"><button class="x" id="vDoneBtn" data-act="vDone"></button></p>
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="boxes">Krabičky</button>
       <button role="tab" data-tab="cakes">Koláče</button>
@@ -320,13 +330,14 @@ import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,doc,collection,onSnapshot,setDoc,deleteDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 (function(){
-  var routes={"":"home","recepty":"recepty","normy":"recepty","vianoce-2026":"vianoce","normy/vianoce-2026":"vianoce","cennik":"cennik","cennik/torty":"cennik-torty","cennik/kolace":"cennik-kolace","cennik/napoje":"cennik-napoje","vyplaty":"vyplaty","naklady":"naklady","naklady/cukraren":"naklady-cukraren","naklady/firma":"naklady-firma","naklady/suroviny":"naklady-suroviny","zaloha":"zaloha"};
-  var ids=["home","recepty","vianoce","cennik","cennik-torty","cennik-kolace","cennik-napoje","vyplaty","naklady","naklady-cukraren","naklady-firma","naklady-suroviny","zaloha"];
+  var routes={"":"home","recepty":"recepty","normy":"recepty","akcie":"akcie","vianoce-2026":"vianoce","akcie/vianoce-2026":"vianoce","normy/vianoce-2026":"vianoce","cennik":"cennik","cennik/torty":"cennik-torty","cennik/kolace":"cennik-kolace","cennik/napoje":"cennik-napoje","vyplaty":"vyplaty","naklady":"naklady","naklady/cukraren":"naklady-cukraren","naklady/firma":"naklady-firma","naklady/suroviny":"naklady-suroviny","zaloha":"zaloha"};
+  var ids=["home","recepty","akcie","vianoce","cennik","cennik-torty","cennik-kolace","cennik-napoje","vyplaty","naklady","naklady-cukraren","naklady-firma","naklady-suroviny","zaloha"];
   function show(){
     var h=(location.hash||"").replace("#","");
     var t=routes[h]||"home";
     ids.forEach(function(id){document.getElementById(id).hidden=(id!==t)});
     if(t==="vianoce")render();
+    if(t==="akcie")renderA();
     if(t==="vyplaty")renderV();
     if(t==="zaloha")openZ();
     if(t==="naklady-suroviny"){srEdit=null;renderSR();srSync()}
@@ -338,7 +349,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   window.addEventListener("hashchange",show);
 
   /* ---- Vianoce 2026 ---- */
-  var tab="boxes",editId=null,kGroup=null,kCake=null,kEd=false,S={cakes:[],boxes:[],orders:[],pair:105,rez:0,dph:0};
+  var tab="boxes",editId=null,kGroup=null,kCake=null,kEd=false,S={cakes:[],boxes:[],orders:[],pair:105,rez:0,dph:0,done:false};
   var gotCfg=false,gotOrders=false,lastCfg="",lastOrders={},seeding=false,started=false,unsubs=[],pending=false;
   var cfgOk=!!(firebaseConfig&&firebaseConfig.apiKey&&String(firebaseConfig.apiKey).indexOf("VLOZ")!==0);
   var app,auth,db,cfgRef,ordersCol;
@@ -372,7 +383,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function save(){
     if(!ready())return;
     try{
-      var cs=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez||0,dph:S.dph||0});
+      var cs=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez||0,dph:S.dph||0,done:S.done||undefined});
       if(cs!==lastCfg){lastCfg=cs;setDoc(cfgRef,JSON.parse(cs)).catch(fail)}
       S.orders.forEach(function(o){var j=ser(o);if(lastOrders[o.id]!==j){lastOrders[o.id]=j;setDoc(doc(ordersCol,o.id),JSON.parse(j)).catch(fail)}});
       Object.keys(lastOrders).forEach(function(id){if(!S.orders.some(function(o){return o.id===id})){delete lastOrders[id];deleteDoc(doc(ordersCol,id)).catch(fail)}});
@@ -404,9 +415,9 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     unsubs.push(onSnapshot(cfgRef,function(snap){
       if(!snap.exists()){if(!snap.metadata.fromCache)firstRun();return}
       var d=snap.data();
-      S.cakes=d.cakes||[];S.boxes=d.boxes||[];S.pair=d.pair||105;S.rez=d.rez||0;S.dph=d.dph||0;
-      lastCfg=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez,dph:S.dph});
-      gotCfg=true;migrate();refresh();
+      S.cakes=d.cakes||[];S.boxes=d.boxes||[];S.pair=d.pair||105;S.rez=d.rez||0;S.dph=d.dph||0;S.done=!!d.done;
+      lastCfg=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez,dph:S.dph,done:S.done||undefined});
+      gotCfg=true;migrate();refresh();if(!document.getElementById("akcie").hidden)renderA();
     },fail));
     unsubs.push(onSnapshot(ordersCol,function(snap){
       var arr=[];lastOrders={};
@@ -418,7 +429,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
-    S={cakes:[],boxes:[],orders:[],pair:105,rez:0,dph:0};lastCfg="";lastOrders={};editId=null;
+    S={cakes:[],boxes:[],orders:[],pair:105,rez:0,dph:0,done:false};lastCfg="";lastOrders={};editId=null;
     stopV();stopC();stopZ();stopSR();stopR();
   }
   function initAuth(){
@@ -596,7 +607,18 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(mixQ)h+='<div class="small warn">Mix koláčov ('+mixQ+' ks) nie je v surovinách zarátaný.</div>';
     return h+'</div>'+viewMargin();
   }
+  /* ---- Akcie ---- */
+  var AKCIE=[{id:"vianoce-2026",name:"Vianoce 2026",done:function(){return S.done}}];
+  function renderA(){
+    var el=document.getElementById("a-body");
+    if(!gotCfg){el.innerHTML='<div class="empty">Načítavam údaje…</div>';return}
+    function row(a,d){return '<a class="row r-akcie'+(d?' r-done':'')+'" href="#akcie/'+a.id+'"><span>'+a.name+'</span><span aria-hidden="true">›</span></a>'}
+    var on=AKCIE.filter(function(a){return !a.done()}),off=AKCIE.filter(function(a){return a.done()});
+    el.innerHTML=(on.length?on.map(function(a){return row(a,false)}).join(""):'<div class="empty">Žiadna prebiehajúca akcia.</div>')+
+      '<h3 class="a-h">Ukončené</h3>'+(off.length?off.map(function(a){return row(a,true)}).join(""):'<div class="empty">Zatiaľ nič.</div>');
+  }
   function render(){
+    document.getElementById("vDoneBtn").textContent=S.done?"Akcia je ukončená · Znova otvoriť":"Ukončiť akciu";
     document.querySelectorAll("#vianoce .tabs button").forEach(function(b){b.setAttribute("aria-selected",b.dataset.tab===tab)});
     document.getElementById("v-body").innerHTML=!ready()?'<div class="empty">Načítavam údaje…</div>':tab==="boxes"?viewBoxes():tab==="cakes"?viewCakes():tab==="orders"?viewOrders():tab==="backup"?viewBackup():viewTotals();
   }
@@ -609,6 +631,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(a==="kCake"){kCake=t.dataset.c;kEd=false;render();window.scrollTo(0,0);return}
     if(a==="kBack"){kEd=false;if(kCake)kCake=null;else kGroup=null;render();window.scrollTo(0,0);return}
     if(a==="backup"){doBackup();return}
+    if(a==="vDone"){if(!ready())return;if(!S.done&&!confirm("Ukončiť akciu Vianoce 2026? Presunie sa medzi ukončené, údaje ostanú."))return;S.done=!S.done;save();render();toast(S.done?"Akcia ukončená":"Akcia znova otvorená");return}
     else if(a==="addCake"){var n=document.getElementById("newCake").value.trim();if(!n)return;S.cakes.push({id:uid(),name:n,items:[],single:true})}
     else if(a==="delCake"){
       if(inBox(id)){alert("Tento koláč je súčasťou krabičky, nedá sa zmazať.");return}
