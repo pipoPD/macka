@@ -867,7 +867,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function ing(id){return SR.items.filter(function(x){return x.id===id})[0]}
   function ingByName(n){var k=cnPlain(String(n||"").trim());return k?SR.items.filter(function(x){return cnPlain(String(x.name).trim())===k})[0]:null}
   // vajce/vajíčko/žĺtok/bielok v norme sa vždy počíta ako jedna surovina Vajce z katalógu (1 ks = 1 vajce; gramy: vajce 50 g, žĺtok 20 g, bielok 30 g)
-  function eggG(n){var k=cnPlain(String(n||"").trim());return /^zlt/.test(k)?20:/^biel/.test(k)?30:/^vaj[ci]/.test(k)?50:0}
+  function eggG(n){var k=cnPlain(String(n||"").trim());return /^zlto?k(a|y|ov|om|u)?$/.test(k)?20:/^bielo?k(a|y|ov|om|u)?$/.test(k)?30:/^vaj[ci]/.test(k)?50:0}
   function eggItem(){var e=SR.items.filter(function(x){return /^vaj[ci]/.test(cnPlain(String(x.name).trim()))});return e.filter(function(x){return x.unit==="ks"})[0]||e[0]||null}
   function ingOf(it){return (eggG(it.name)&&eggItem())||(it.ingId&&ing(it.ingId))||ingByName(it.name)||null}
   // množstvo položky normy v základnej jednotke suroviny z katalógu (g/ml/ks), null ak sa nedá prepočítať
