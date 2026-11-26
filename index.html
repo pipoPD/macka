@@ -936,7 +936,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var el=document.getElementById("sr-body");if(!el)return;
     if(!srGot){el.innerHTML='<div class="empty">Načítavam údaje…</div>';return}
     var h='<details class="card"'+(SR.items.length?'':' open')+'><summary>Pridať surovinu</summary>'+srForm()+'<div class="form"><button class="btn" data-act="sAdd">Pridať</button></div></details>';
-    if(!SR.items.length){el.innerHTML=h+'<div class="empty"><strong>Katalóg je prázdny.</strong>Pridaj suroviny tu alebo ich naraz prenes z noriem (Vianoce 2026 → Koláče → Pridať všetky do katalógu).</div>';return}
+    var imp='<div class="card"><h3>Nahrať ceny zo súboru</h3><div class="small">Google Sheets → Súbor → Stiahnuť → CSV. Suroviny sa spárujú podľa názvu, prázdne bunky nič neprepíšu, nové suroviny pribudnú.</div><div class="form"><input type="file" id="srFile" accept=".csv,text/csv"></div></div>';
+    if(!SR.items.length){el.innerHTML=h+imp+'<div class="empty"><strong>Katalóg je prázdny.</strong>Pridaj suroviny tu alebo ich naraz prenes z noriem (Vianoce 2026 → Koláče → Pridať všetky do katalógu).</div>';return}
     h+='<div class="form"><input class="grow" id="srQ" type="search" placeholder="Hľadať surovinu" value="'+esc(srQ)+'"></div><div class="card" id="srList">';
     SR.items.slice().sort(function(a,b){return a.name.localeCompare(b.name,"sk")}).forEach(function(g){
       if(srEdit===g.id){
@@ -950,13 +951,61 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       var egg=eggG(g.name)&&eggItem()&&eggItem()!==g;
       h+='<div class="sr-row" data-id="'+g.id+'" data-s="'+esc(cnPlain(g.name+" "+(g.sup||"")))+'"><div><b>'+esc(g.name)+(egg?'<span class="tag">nepoužíva sa</span>':u===null?'<span class="tag">bez ceny</span>':'')+'</b>'+(egg?'<span class="small">Vajcia, žĺtky a bielky sa počítajú cez „'+esc(eggItem().name)+'“. <button class="linkbtn" data-act="sDel">Zmazať</button><br></span>':'')+'<span class="small">'+info.join(" · ")+(g.note?'<br>'+esc(g.note):'')+'</span></div><button class="x" data-act="sEdit">Upraviť</button></div>';
     });
-    el.innerHTML=h+'</div>';
+    el.innerHTML=h+'</div>'+imp;
     srFilter();
   }
   function srFilter(){var q=cnPlain(srQ.trim());document.querySelectorAll("#srList .sr-row[data-s]").forEach(function(r){r.hidden=!!q&&r.dataset.s.indexOf(q)<0})}
   function srIn(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#sr-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName)&&a.id!=="srQ")}
   function srRefresh(){if(document.getElementById("naklady-suroviny").hidden)return;if(srEdit||srIn()){srPend=true;return}renderSR()}
   document.getElementById("sr-body").addEventListener("focusout",function(){if(!srPend)return;setTimeout(function(){if(srIn()||srEdit)return;srPend=false;renderSR()},600)});
+  function csvRows(t){
+    t=String(t).replace(/^\ufeff/,"");var first=t.split(/\r?\n/)[0]||"",sep=(first.split(";").length>first.split(",").length)?";":",";
+    var rows=[],row=[],f="",q=false;
+    for(var i=0;i<t.length;i++){
+      var ch=t[i];
+      if(q){if(ch==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=ch}
+      else if(ch==='"')q=true;
+      else if(ch===sep){row.push(f);f=""}
+      else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&t[i+1]==="\n")i++;row.push(f);rows.push(row);row=[];f=""}
+      else f+=ch;
+    }
+    if(f!==""||row.length){row.push(f);rows.push(row)}
+    return rows;
+  }
+  function csvNum(v){v=String(v||"").replace(/[^0-9,.\-]/g,"").replace(",",".");if(!v)return null;var n=parseFloat(v);return isNaN(n)?null:n}
+  function srImport(text){
+    var rows=csvRows(text),hi=-1;
+    rows.forEach(function(r,i){if(hi<0&&cnPlain(String(r[0]||"").trim())==="surovina")hi=i});
+    if(hi<0)throw new Error("Chýba riadok s hlavičkou „Surovina“.");
+    var col={};rows[hi].forEach(function(c,i){var k=cnPlain(String(c).trim());
+      if(k==="surovina")col.name=i;else if(k.indexOf("jednotka")===0)col.unit=i;else if(k.indexOf("balenie")===0)col.pack=i;
+      else if(k.indexOf("cena za balenie")===0)col.price=i;else if(k.indexOf("dodavatel")===0)col.sup=i;else if(k.indexOf("poznamka")===0)col.note=i});
+    var cell=function(r,k){return col[k]==null?"":String(r[col[k]]||"").trim()};
+    var ops=[],up=0,nw=0;
+    rows.slice(hi+1).forEach(function(r){
+      var name=cell(r,"name");if(!name)return;
+      var u=cnPlain(cell(r,"unit")),d={};
+      if(UF[u])d.unit=u;
+      var pk=csvNum(cell(r,"pack"));if(pk>0)d.pack=pk;
+      var pr=csvNum(cell(r,"price"));if(pr>0)d.price=Math.round(pr*100)/100;
+      if(cell(r,"sup"))d.sup=cell(r,"sup");
+      if(cell(r,"note"))d.note=cell(r,"note");
+      var g=(eggG(name)&&eggItem())||ingByName(name);
+      if(g){if(Object.keys(d).some(function(k){return g[k]!==d[k]})){ops.push([g,d]);up++}}
+      else{ops.push([null,{id:uid(),name:name,unit:d.unit||"kg",pack:d.pack||1,price:d.price||0,sup:d.sup||"",note:d.note||""}]);nw++}
+    });
+    if(!ops.length){toast("Nič nové na nahratie, katalóg už sedí.");return}
+    if(!confirm("Nahrať ceny zo súboru?\nAktualizuje sa: "+up+", pribudne: "+nw+"."))return;
+    ops.forEach(function(o){if(o[0])Object.keys(o[1]).forEach(function(k){o[0][k]=o[1][k]});else SR.items.push(o[1])});
+    srSave();linkAll();renderSR();toast("Ceny nahraté (aktualizované "+up+", nové "+nw+")");
+  }
+  document.getElementById("sr-body").addEventListener("change",function(e){
+    if(e.target.id!=="srFile"||!srGot)return;
+    var f=e.target.files[0];if(!f)return;
+    var fr=new FileReader();
+    fr.onload=function(){try{srImport(fr.result)}catch(err){alert("Súbor sa nepodarilo načítať.\n"+(err.message||""))}e.target.value=""};
+    fr.readAsText(f,"utf-8");
+  });
   document.getElementById("sr-body").addEventListener("input",function(e){if(e.target.id==="srQ"){srQ=e.target.value;srFilter()}});
   document.getElementById("sr-body").addEventListener("click",function(e){
     var t=e.target.closest("button");if(!t||!t.dataset.act||!srGot)return;

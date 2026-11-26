@@ -1,5 +1,5 @@
 // Jednoduchý service worker: aplikácia sa otvorí aj bez internetu (naposledy načítaná verzia).
-var C = "mt-cache-v29";
+var C = "mt-cache-v30";
 self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (e) { e.waitUntil(clients.claim()); });
 self.addEventListener("fetch", function (e) {
