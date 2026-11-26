@@ -732,10 +732,9 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function rcList(){
     var h='<div class="form"><input class="grow" id="rcQ" type="search" placeholder="Hľadať recept" value="'+esc(rcQ)+'"><button class="btn" data-act="rNew">Pridať recept</button></div>';
     if(!RC.items.length)h+='<div class="empty"><strong>Zatiaľ tu nie sú žiadne recepty.</strong>Pridaj recept alebo ich nahraj zo súboru.</div>';
-    var cats=[];RC.items.forEach(function(r){var c=r.cat||"Bez kategórie";if(cats.indexOf(c)<0)cats.push(c)});
-    cats.sort(function(a,b){return a.localeCompare(b,"sk")}).forEach(function(c){
-      h+='<div class="rc-cat"><h3 class="kh" style="margin-top:18px">'+esc(c)+'</h3>';
-      RC.items.filter(function(r){return (r.cat||"Bez kategórie")===c}).forEach(function(r){
+    [0].forEach(function(){
+      h+='<div class="rc-cat">';
+      RC.items.slice().sort(function(a,b){return a.name.localeCompare(b.name,"sk")}).forEach(function(r){
         h+='<button class="row kb rc" data-act="rOpen" data-id="'+r.id+'" data-s="'+esc(cnPlain(r.name))+'"><span><span class="kt">'+esc(r.name)+'</span><span class="small">'+esc([r.yield,algList(r.alg).length?"A: "+algList(r.alg).join(", "):""].filter(Boolean).join(" · "))+'</span></span><span aria-hidden="true">›</span></button>';
       });
       h+='</div>';
@@ -751,7 +750,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function rcDetail(r){
     var h='<button class="back" data-act="rBack">‹ Recepty</button><div class="card"><div class="cn-h"><h3>'+esc(r.name)+'</h3><button class="x" data-act="rEdit">Upraviť</button></div>';
-    var meta=[r.cat,r.yield].filter(Boolean);if(meta.length)h+='<div class="small">'+esc(meta.join(" · "))+'</div>';
+    var meta=[r.yield].filter(Boolean);if(meta.length)h+='<div class="small">'+esc(meta.join(" · "))+'</div>';
     var al=algList(r.alg);h+='<div style="margin-top:6px">'+(al.length?al.map(function(n){return '<span class="tag alg">'+n+' '+ALG[n]+'</span>'}).join(""):'<span class="small">Alergény nie sú zadané.</span>')+'</div>';
     var ck=r.cakeId&&gotCfg?cake(r.cakeId):null;
     if(ck&&ck.items.length){var cc=cakeCost(ck);h+='<div class="small" style="margin-top:4px"><strong>Suroviny podľa normy: '+e2(cc.pc)+'/ks</strong>'+(cc.miss?' <span class="warn">(niektoré bez ceny)</span>':'')+'</div>'}
@@ -766,7 +765,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function rcEditView(){
     var d=rcDraft,h='<button class="back" data-act="rCancel">‹ Zrušiť</button><div class="card rc-ed"><h3>'+(d.id?'Upraviť recept':'Nový recept')+'</h3>';
-    h+='<div class="vgrid"><label class="full">Názov<input id="rName" value="'+esc(d.name||"")+'"></label><label>Kategória<input id="rCat" value="'+esc(d.cat||"")+'" placeholder="napr. Vianoce 2026"></label><label>Výťažnosť<input id="rYield" value="'+esc(d.yield||"")+'" placeholder="napr. z dávky 45 ks"></label></div><div class="rc-lbl">Alergény</div><div class="vgrid">'+ALG.map(function(t,n){return n?'<label class="chk"><input type="checkbox" class="r-alg" value="'+n+'"'+(algList(d.alg).indexOf(n)>=0?' checked':'')+'> '+n+' '+t+'</label>':''}).join("")+'</div><div class="vgrid">';
+    h+='<div class="vgrid"><label class="full">Názov<input id="rName" value="'+esc(d.name||"")+'"></label><label class="full">Výťažnosť<input id="rYield" value="'+esc(d.yield||"")+'" placeholder="napr. z dávky 45 ks"></label></div><div class="rc-lbl">Alergény</div><div class="vgrid">'+ALG.map(function(t,n){return n?'<label class="chk"><input type="checkbox" class="r-alg" value="'+n+'"'+(algList(d.alg).indexOf(n)>=0?' checked':'')+'> '+n+' '+t+'</label>':''}).join("")+'</div><div class="vgrid">';
     h+='<label class="full">Prepojiť s koláčom (cena surovín)<select id="rCake"><option value="">—</option>'+S.cakes.map(function(c){return '<option value="'+c.id+'"'+(d.cakeId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'}).join("")+'</select></label></div>';
     (d.parts||[]).forEach(function(p,i){
       h+='<div class="rc-part rc-p" style="border-top:1px solid var(--line);padding-top:10px"><div class="vgrid"><label class="full">Časť<input class="p-t" value="'+esc(p.t||"")+'" placeholder="napr. Korpus"></label><label class="full">Suroviny<textarea class="p-ingr">'+esc(p.ingr||"")+'</textarea></label><label class="full">Postup<textarea class="p-steps">'+esc(p.steps||"")+'</textarea></label></div><button class="x" data-act="rDelPart" data-i="'+i+'">Zmazať časť</button></div>';
@@ -778,7 +777,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function rcRead(){
     var d=rcDraft,v=function(id){return document.getElementById(id).value.trim()};
-    d.name=v("rName");d.cat=v("rCat");d.yield=v("rYield");d.alg=[];document.querySelectorAll("#rc-body .r-alg:checked").forEach(function(c){d.alg.push(+c.value)});d.cakeId=document.getElementById("rCake").value;d.note=document.getElementById("rNote").value.trim();
+    d.name=v("rName");d.yield=v("rYield");d.alg=[];document.querySelectorAll("#rc-body .r-alg:checked").forEach(function(c){d.alg.push(+c.value)});d.cakeId=document.getElementById("rCake").value;d.note=document.getElementById("rNote").value.trim();
     d.parts=[];document.querySelectorAll("#rc-body .rc-p").forEach(function(el){d.parts.push({t:el.querySelector(".p-t").value.trim(),ingr:el.querySelector(".p-ingr").value.trim(),steps:el.querySelector(".p-steps").value.trim()})});
   }
   function rcClean(r){

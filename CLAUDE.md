@@ -34,7 +34,7 @@
 - Zmeny v `cennik-web.js` sa do existujúcej databázy nepremietnu samé (treba jednorazovú úpravu s príznakom ako `napSeed`/`kolDel`, alebo úpravu v appke).
 
 ## Sekcie (hlavné menu)
-Vianoce 2026 (hotové; Koláče: krabička → koláč → detail so surovinami a cenou za kus; nákupný zoznam s cenami a marža krabičiek), Recepty (zoznam podľa kategórií, detail s časťami, úprava, nahratie zo súboru; fotky zatiaľ nie), Normy (prázdne), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
+Vianoce 2026 (hotové; Koláče: krabička → koláč → detail so surovinami a cenou za kus; nákupný zoznam s cenami a marža krabičiek), Recepty (zoznam podľa abecedy bez kategórií, detail s časťami a alergénmi, úprava, nahratie zo súboru; fotky zatiaľ nie), Normy (prázdne), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
 Kalendár a Správy boli zámerne odstránené, nevracať ich.
 
 ## Výplaty – výpočet
