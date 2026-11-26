@@ -133,6 +133,7 @@ details.card summary{cursor:pointer;font-weight:700}
 .cn-v .vgrid{margin-top:4px}
 button.row.rc{background:var(--rose)}
 .rc-part{margin-top:12px}
+.tag.alg{margin:0 6px 6px 0;background:var(--blue);font-size:.8rem}
 .rc-part h4{margin:0 0 4px;font-family:"Fraunces",Georgia,serif;font-size:1.05rem}
 .rc-lbl{font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:8px}
 .rc-ed textarea{min-height:90px}
@@ -705,9 +706,11 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     setTimeout(function(){if(inField())return;pending=false;render()},600);
   });
   /* ---- Recepty ---- */
-  // Údaje: apps/recepty {items:[{id,name,cat,yield,box,cakeId,parts:[{t,ingr,steps}],note}]}; texty receptov sú len vo Firebase
+  // Údaje: apps/recepty {items:[{id,name,cat,yield,alg:[1..14],cakeId,parts:[{t,ingr,steps}],note}]}; alg = čísla alergénov EÚ; texty receptov sú len vo Firebase
   var RC={items:[]},rcGot=false,rcUn=null,rcView=null,rcDraft=null,rcQ="",rcPend=false;
   var rcRef=cfgOk?doc(db,"apps","recepty"):null;
+  var ALG=["","Lepok","Kôrovce","Vajcia","Ryby","Arašidy","Sója","Mlieko","Orechy","Zeler","Horčica","Sezam","Oxid siričitý","Vlčí bôb","Mäkkýše"];
+  function algList(a){return (a||[]).filter(function(n){return n>=1&&n<=14})}
   function startR(){
     if(rcUn||!cfgOk)return;
     rcUn=onSnapshot(rcRef,function(snap){RC={items:snap.exists()?(snap.data().items||[]):[]};rcGot=true;rcRefresh()},fail);
@@ -733,7 +736,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     cats.sort(function(a,b){return a.localeCompare(b,"sk")}).forEach(function(c){
       h+='<div class="rc-cat"><h3 class="kh" style="margin-top:18px">'+esc(c)+'</h3>';
       RC.items.filter(function(r){return (r.cat||"Bez kategórie")===c}).forEach(function(r){
-        h+='<button class="row kb rc" data-act="rOpen" data-id="'+r.id+'" data-s="'+esc(cnPlain(r.name))+'"><span><span class="kt">'+esc(r.name)+'</span><span class="small">'+esc([r.yield,r.box].filter(Boolean).join(" · "))+'</span></span><span aria-hidden="true">›</span></button>';
+        h+='<button class="row kb rc" data-act="rOpen" data-id="'+r.id+'" data-s="'+esc(cnPlain(r.name))+'"><span><span class="kt">'+esc(r.name)+'</span><span class="small">'+esc([r.yield,algList(r.alg).length?"A: "+algList(r.alg).join(", "):""].filter(Boolean).join(" · "))+'</span></span><span aria-hidden="true">›</span></button>';
       });
       h+='</div>';
     });
@@ -748,7 +751,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function rcDetail(r){
     var h='<button class="back" data-act="rBack">‹ Recepty</button><div class="card"><div class="cn-h"><h3>'+esc(r.name)+'</h3><button class="x" data-act="rEdit">Upraviť</button></div>';
-    var meta=[r.cat,r.yield,r.box].filter(Boolean);if(meta.length)h+='<div class="small">'+esc(meta.join(" · "))+'</div>';
+    var meta=[r.cat,r.yield].filter(Boolean);if(meta.length)h+='<div class="small">'+esc(meta.join(" · "))+'</div>';
+    var al=algList(r.alg);h+='<div style="margin-top:6px">'+(al.length?al.map(function(n){return '<span class="tag alg">'+n+' '+ALG[n]+'</span>'}).join(""):'<span class="small">Alergény nie sú zadané.</span>')+'</div>';
     var ck=r.cakeId&&gotCfg?cake(r.cakeId):null;
     if(ck&&ck.items.length){var cc=cakeCost(ck);h+='<div class="small" style="margin-top:4px"><strong>Suroviny podľa normy: '+e2(cc.pc)+'/ks</strong>'+(cc.miss?' <span class="warn">(niektoré bez ceny)</span>':'')+'</div>'}
     (r.parts||[]).forEach(function(p){
@@ -762,7 +766,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function rcEditView(){
     var d=rcDraft,h='<button class="back" data-act="rCancel">‹ Zrušiť</button><div class="card rc-ed"><h3>'+(d.id?'Upraviť recept':'Nový recept')+'</h3>';
-    h+='<div class="vgrid"><label class="full">Názov<input id="rName" value="'+esc(d.name||"")+'"></label><label>Kategória<input id="rCat" value="'+esc(d.cat||"")+'" placeholder="napr. Vianoce 2026"></label><label>Výťažnosť<input id="rYield" value="'+esc(d.yield||"")+'" placeholder="napr. z dávky 45 ks"></label><label>Balenie<input id="rBox" value="'+esc(d.box||"")+'" placeholder="napr. 10 ks v krabičke"></label>';
+    h+='<div class="vgrid"><label class="full">Názov<input id="rName" value="'+esc(d.name||"")+'"></label><label>Kategória<input id="rCat" value="'+esc(d.cat||"")+'" placeholder="napr. Vianoce 2026"></label><label>Výťažnosť<input id="rYield" value="'+esc(d.yield||"")+'" placeholder="napr. z dávky 45 ks"></label></div><div class="rc-lbl">Alergény</div><div class="vgrid">'+ALG.map(function(t,n){return n?'<label class="chk"><input type="checkbox" class="r-alg" value="'+n+'"'+(algList(d.alg).indexOf(n)>=0?' checked':'')+'> '+n+' '+t+'</label>':''}).join("")+'</div><div class="vgrid">';
     h+='<label class="full">Prepojiť s koláčom (cena surovín)<select id="rCake"><option value="">—</option>'+S.cakes.map(function(c){return '<option value="'+c.id+'"'+(d.cakeId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'}).join("")+'</select></label></div>';
     (d.parts||[]).forEach(function(p,i){
       h+='<div class="rc-part rc-p" style="border-top:1px solid var(--line);padding-top:10px"><div class="vgrid"><label class="full">Časť<input class="p-t" value="'+esc(p.t||"")+'" placeholder="napr. Korpus"></label><label class="full">Suroviny<textarea class="p-ingr">'+esc(p.ingr||"")+'</textarea></label><label class="full">Postup<textarea class="p-steps">'+esc(p.steps||"")+'</textarea></label></div><button class="x" data-act="rDelPart" data-i="'+i+'">Zmazať časť</button></div>';
@@ -774,11 +778,11 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function rcRead(){
     var d=rcDraft,v=function(id){return document.getElementById(id).value.trim()};
-    d.name=v("rName");d.cat=v("rCat");d.yield=v("rYield");d.box=v("rBox");d.cakeId=document.getElementById("rCake").value;d.note=document.getElementById("rNote").value.trim();
+    d.name=v("rName");d.cat=v("rCat");d.yield=v("rYield");d.alg=[];document.querySelectorAll("#rc-body .r-alg:checked").forEach(function(c){d.alg.push(+c.value)});d.cakeId=document.getElementById("rCake").value;d.note=document.getElementById("rNote").value.trim();
     d.parts=[];document.querySelectorAll("#rc-body .rc-p").forEach(function(el){d.parts.push({t:el.querySelector(".p-t").value.trim(),ingr:el.querySelector(".p-ingr").value.trim(),steps:el.querySelector(".p-steps").value.trim()})});
   }
   function rcClean(r){
-    var o={id:r.id||uid(),name:String(r.name||"").trim(),cat:String(r.cat||"").trim(),yield:String(r.yield||"").trim(),box:String(r.box||"").trim(),cakeId:String(r.cakeId||""),note:String(r.note||"").trim(),parts:[]};
+    var o={id:r.id||uid(),name:String(r.name||"").trim(),cat:String(r.cat||"").trim(),yield:String(r.yield||"").trim(),alg:(Array.isArray(r.alg)?r.alg:[]).map(Number).filter(function(n,i,a){return n>=1&&n<=14&&a.indexOf(n)===i}).sort(function(a,b){return a-b}),cakeId:String(r.cakeId||""),note:String(r.note||"").trim(),parts:[]};
     (r.parts||[]).forEach(function(p){var q={t:String(p.t||"").trim(),ingr:String(p.ingr||"").trim(),steps:String(p.steps||"").trim()};if(q.t||q.ingr||q.steps)o.parts.push(q)});
     return o;
   }
