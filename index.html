@@ -295,7 +295,7 @@ table.nw td.r,table.nw th.r{white-space:nowrap}
   <section id="naklady-suroviny" hidden>
     <a class="back" href="#naklady">‹ Náklady</a>
     <h2>Suroviny</h2>
-    <p class="sub">Katalóg surovín s cenami (s DPH). Používajú ho normy koláčov a nákupný zoznam.</p>
+    <p class="sub">Katalóg surovín s cenami bez DPH. Používajú ho normy koláčov a nákupný zoznam.</p>
     <div id="sr-body"></div>
   </section>
 
@@ -337,7 +337,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   window.addEventListener("hashchange",show);
 
   /* ---- Vianoce 2026 ---- */
-  var tab="boxes",editId=null,kGroup=null,kCake=null,kEd=false,S={cakes:[],boxes:[],orders:[],pair:105,rez:0};
+  var tab="boxes",editId=null,kGroup=null,kCake=null,kEd=false,S={cakes:[],boxes:[],orders:[],pair:105,rez:0,dph:0};
   var gotCfg=false,gotOrders=false,lastCfg="",lastOrders={},seeding=false,started=false,unsubs=[],pending=false;
   var cfgOk=!!(firebaseConfig&&firebaseConfig.apiKey&&String(firebaseConfig.apiKey).indexOf("VLOZ")!==0);
   var app,auth,db,cfgRef,ordersCol;
@@ -371,7 +371,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   function save(){
     if(!ready())return;
     try{
-      var cs=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez||0});
+      var cs=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez||0,dph:S.dph||0});
       if(cs!==lastCfg){lastCfg=cs;setDoc(cfgRef,JSON.parse(cs)).catch(fail)}
       S.orders.forEach(function(o){var j=ser(o);if(lastOrders[o.id]!==j){lastOrders[o.id]=j;setDoc(doc(ordersCol,o.id),JSON.parse(j)).catch(fail)}});
       Object.keys(lastOrders).forEach(function(id){if(!S.orders.some(function(o){return o.id===id})){delete lastOrders[id];deleteDoc(doc(ordersCol,id)).catch(fail)}});
@@ -403,8 +403,8 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     unsubs.push(onSnapshot(cfgRef,function(snap){
       if(!snap.exists()){if(!snap.metadata.fromCache)firstRun();return}
       var d=snap.data();
-      S.cakes=d.cakes||[];S.boxes=d.boxes||[];S.pair=d.pair||105;S.rez=d.rez||0;
-      lastCfg=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez});
+      S.cakes=d.cakes||[];S.boxes=d.boxes||[];S.pair=d.pair||105;S.rez=d.rez||0;S.dph=d.dph||0;
+      lastCfg=ser({cakes:S.cakes,boxes:S.boxes,pair:S.pair,rez:S.rez,dph:S.dph});
       gotCfg=true;migrate();refresh();
     },fail));
     unsubs.push(onSnapshot(ordersCol,function(snap){
@@ -417,7 +417,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
-    S={cakes:[],boxes:[],orders:[],pair:105,rez:0};lastCfg="";lastOrders={};editId=null;
+    S={cakes:[],boxes:[],orders:[],pair:105,rez:0,dph:0};lastCfg="";lastOrders={};editId=null;
     stopV();stopC();stopZ();stopSR();stopR();
   }
   function initAuth(){
@@ -481,7 +481,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     return h;
   }
   function doBackup(){
-    var d={app:"mackine-torty",exported:new Date().toISOString(),pair:S.pair,rez:S.rez||0,cakes:S.cakes,boxes:S.boxes,orders:S.orders,suroviny:SR.items};
+    var d={app:"mackine-torty",exported:new Date().toISOString(),pair:S.pair,rez:S.rez||0,dph:S.dph||0,cakes:S.cakes,boxes:S.boxes,orders:S.orders,suroviny:SR.items};
     var blob=new Blob([JSON.stringify(d,null,1)],{type:"application/json"});
     var a=document.createElement("a");a.href=URL.createObjectURL(blob);
     a.download="mackine-torty-zaloha-"+new Date().toISOString().slice(0,10)+".json";
@@ -508,7 +508,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     var h='',others=S.cakes.filter(function(c){return !inBox(c.id)});
     S.boxes.forEach(function(b){
       var t=0,miss=0,n=0;b.comp.forEach(function(x){var c=cake(x.cakeId);if(!c)return;n++;var cc=cakeCost(c);t+=cc.pc*x.qty;if(cc.miss||!normOf(c).items.length)miss++});
-      h+='<button class="row kb" data-act="kOpen" data-g="'+b.id+'"><span><span class="kt">'+esc(b.name)+'</span><span class="small">'+n+' koláčov · suroviny '+e2(t)+' · cena '+e2(b.price)+(miss?' · <span class="warn">'+miss+' bez úplnej ceny</span>':'')+'</span></span><span aria-hidden="true">›</span></button>';
+      h+='<button class="row kb" data-act="kOpen" data-g="'+b.id+'"><span><span class="kt">'+esc(b.name)+'</span><span class="small">'+n+' koláčov · suroviny '+e2(t)+' · predaj '+e2(b.price)+' s DPH'+(miss?' · <span class="warn">'+miss+' bez úplnej ceny</span>':'')+'</span></span><span aria-hidden="true">›</span></button>';
     });
     if(others.length)h+='<button class="row kb" data-act="kOpen" data-g="other"><span><span class="kt">Ostatné koláče</span><span class="small">'+others.length+' koláčov mimo krabičiek</span></span><span aria-hidden="true">›</span></button>';
     var off={};allNorms().forEach(function(n){n.items.forEach(function(it){if(!ingOf(it))off[cnPlain(it.name.trim())]=1})});
@@ -530,7 +530,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       var c=r[0],cc=cakeCost(c),nl=normOf(c).items.length,bad=!nl?'bez normy':cc.miss?'chýba cena':'';tot+=cc.pc*r[1];
       h+='<button class="row kb" data-act="kCake" data-c="'+c.id+'"><span><span class="kt">'+esc(c.name)+'</span><span class="small">'+(r[1]?r[1]+' ks v krabičke':'')+(nl?(r[1]?' · ':'')+e2(cc.pc)+'/ks':'')+(bad?' <span class="tag">'+bad+'</span>':'')+'</span></span><span aria-hidden="true">›</span></button>';
     });
-    if(b)h+='<div class="card"><div class="line" style="border:0"><strong>Suroviny na 1 krabičku</strong><strong>'+e2(tot)+'</strong></div><div class="line" style="border:0"><span>Predajná cena</span><span>'+e2(b.price)+'</span></div></div>';
+    if(b)h+='<div class="card"><div class="line" style="border:0"><strong>Suroviny na 1 krabičku</strong><strong>'+e2(tot)+'</strong></div><div class="line" style="border:0"><span>Predajná cena s DPH</span><span>'+e2(b.price)+'</span></div></div>';
     return h;
   }
   function viewCakeDetail(c){
@@ -545,14 +545,17 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     }
     return h+'</div></div>';
   }
+  function net(p){return p/(1+(S.dph||0)/100)}
   function viewMargin(){
-    var h='<div class="card"><h3>Náklad na suroviny a marža</h3><table class="nw"><tr><th></th><th class="r">Suroviny</th><th class="r">Cena</th><th class="r">Marža</th></tr>',miss=0;
+    var h='<div class="card"><h3>Náklad na suroviny a marža</h3><div class="form" style="align-items:center;margin-top:0"><span class="small">DPH na predaj</span><input class="num" id="vDph" inputmode="decimal" value="'+(S.dph?String(S.dph).replace(".",","):"")+'" placeholder="%"><span class="small">%</span></div>';
+    h+='<table class="nw"><tr><th></th><th class="r">Suroviny</th><th class="r">Predaj</th><th class="r">Marža</th></tr>';
+    var miss=0;
     S.boxes.forEach(function(b){
       var t=0;b.comp.forEach(function(x){var c=cake(x.cakeId);if(!c)return;var cc=cakeCost(c);t+=cc.pc*x.qty;miss+=cc.miss});
-      var m=b.price-t;
-      h+='<tr><td>'+esc(b.name)+'</td><td class="r">'+e2(t)+'</td><td class="r">'+e2(b.price)+'</td><td class="r">'+e2(m)+(b.price?'<div class="small">'+Math.round(m/b.price*100)+' %</div>':'')+'</td></tr>';
+      var pn=net(b.price),m=pn-t;
+      h+='<tr><td>'+esc(b.name)+'</td><td class="r">'+e2(t)+'</td><td class="r">'+e2(pn)+'</td><td class="r">'+e2(m)+(pn?'<div class="small">'+Math.round(m/pn*100)+' %</div>':'')+'</td></tr>';
     });
-    h+='</table><div class="small">Ceny s DPH, len suroviny (bez práce, obalov a energií).'+(miss?' <span class="warn">Niektoré suroviny nemajú cenu, náklad je preto nižší.</span>':'')+'</div></div>';
+    h+='</table><div class="small">Všetko bez DPH, len suroviny (bez práce, obalov a energií). Predaj = cena krabičky s DPH prepočítaná na cenu bez DPH.'+(S.dph?'':' <span class="warn">Zadaj DPH na predaj, inak sa počíta s cenou s DPH.</span>')+(miss?' <span class="warn">Niektoré suroviny nemajú cenu, náklad je preto nižší.</span>':'')+'</div></div>';
     return h;
   }
   function viewTotals(){
@@ -585,7 +588,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
         else noP++;
         h+='<tr><td>'+esc(r.name)+'<div class="small">kúpiť '+buy+(g&&g.sup?' · '+esc(g.sup):'')+'</div></td><td class="r">'+fmt(q,r.unit)+'</td><td class="r">'+cost+'</td></tr>';
       });
-      h+='</tbody><tfoot><tr><td colspan="2">Nákup spolu</td><td class="r">'+e2(sum)+'</td></tr></tfoot></table>';
+      h+='</tbody><tfoot><tr><td colspan="2">Nákup spolu bez DPH</td><td class="r">'+e2(sum)+'</td></tr></tfoot></table>';
       h+='<div class="small">Spotreba surovín v cene: '+e2(exact)+' (bez zvyšku z balení).</div>';
       if(noP)h+='<div class="small warn">'+noP+' surovín nemá cenu alebo balenie. Doplň ich v <a href="#naklady/suroviny">katalógu surovín</a>.</div>';
     }
@@ -640,6 +643,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   });
   document.getElementById("vianoce").addEventListener("change",function(e){
     if(e.target.id==="vRez"){S.rez=+e.target.value||0;save();render();return}
+    if(e.target.id==="vDph"){var dv=num(e.target.value);S.dph=dv>0&&dv<100?dv:0;save();render();return}
     if(e.target.classList.contains("c-rec")){var rk=cake(e.target.closest(".card").dataset.id);if(rk){if(e.target.value)rk.recId=e.target.value;else delete rk.recId;save();render()}return}
     if(e.target.id==="normsFile"){
       var nf=e.target.files[0];if(!nf)return;
@@ -671,7 +675,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
         if(!d||!Array.isArray(d.cakes)||!Array.isArray(d.boxes)||!Array.isArray(d.orders))throw new Error("zlý súbor");
         if(!confirm("Obnoviť zo zálohy? Aktuálne údaje sa nahradia ("+d.orders.length+" objednávok)."))return;
         d.orders.forEach(function(o,i){if(!o.id)o.id="r"+i+uid()});
-        S.cakes=d.cakes;S.boxes=d.boxes;S.pair=d.pair||105;S.rez=d.rez||0;S.orders=d.orders;editId=null;
+        S.cakes=d.cakes;S.boxes=d.boxes;S.pair=d.pair||105;S.rez=d.rez||0;S.dph=d.dph||0;S.orders=d.orders;editId=null;
         if(Array.isArray(d.suroviny)&&srGot){SR.items=d.suroviny;srSave()}
         save();render();toast("Obnovené zo zálohy");
       }catch(err){toast("Súbor so zálohou sa nepodarilo načítať")}
@@ -844,7 +848,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
   });
 
   /* ---- Suroviny (katalóg) ---- */
-  // Údaje: apps/suroviny {items:[{id,name,unit:kg|l|ks,pack,price,sup,note}]}; price = € s DPH za balenie (pack v jednotke unit)
+  // Údaje: apps/suroviny {items:[{id,name,unit:kg|l|ks,pack,price,sup,note}]}; price = € bez DPH za balenie (pack v jednotke unit)
   // Norma je v recepte: recept.batch = ks z dávky (chýba = 1), recept.items[{name,qty,unit:g|kg|ml|l|ks,ingId}]; koláč vo Vianociach má recId (staré cake.items ostávajú ako záloha)
   var SR={items:[]},srGot=false,srUn=null,srEdit=null,srQ="",srPend=false,lastSR="";
   var srRef=cfgOk?doc(db,"apps","suroviny"):null;
@@ -909,7 +913,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     return '<div class="vgrid"><label class="full">Názov<input class="s-name" value="'+esc(g.name)+'" placeholder="napr. Maslo 82 %"></label>'+
       '<label>Jednotka<select class="s-unit">'+["kg","l","ks"].map(function(u){return '<option'+(g.unit===u?' selected':'')+'>'+u+'</option>'}).join("")+'</select></label>'+
       '<label>Balenie (množstvo)<input class="s-pack" inputmode="decimal" value="'+(g.pack===""?"":fmtN(g.pack))+'" placeholder="napr. 10"></label>'+
-      '<label>Cena za balenie €<input class="s-price" inputmode="decimal" value="'+(g.price===""||!g.price?"":String(g.price).replace(".",","))+'" placeholder="s DPH"></label>'+
+      '<label>Cena za balenie € bez DPH<input class="s-price" inputmode="decimal" value="'+(g.price===""||!g.price?"":String(g.price).replace(".",","))+'" placeholder="bez DPH"></label>'+
       '<label class="full">Dodávateľ<input class="s-sup" value="'+esc(g.sup||"")+'" placeholder="napr. Metro"></label>'+
       '<label class="full">Poznámka<input class="s-note" value="'+esc(g.note||"")+'"></label></div>';
   }
