@@ -131,6 +131,11 @@ details.card summary{cursor:pointer;font-weight:700}
 .cn-item summary{cursor:pointer;font-weight:700;color:var(--berry)}
 .cn-v{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 .cn-v .vgrid{margin-top:4px}
+button.row.rc{background:var(--rose)}
+.rc-part{margin-top:12px}
+.rc-part h4{margin:0 0 4px;font-family:"Fraunces",Georgia,serif;font-size:1.05rem}
+.rc-lbl{font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:8px}
+.rc-ed textarea{min-height:90px}
 button.row.kb{width:100%;font:inherit;text-align:left;border:0;cursor:pointer;background:var(--xmas)}
 button.row.kb .kt{display:block;font-family:"Fraunces",Georgia,serif;font-size:1.15rem}
 button.row.kb .small{display:block;color:var(--tile-ink);opacity:.8;font-weight:600}
@@ -223,7 +228,7 @@ table.nw td.r,table.nw th.r{white-space:nowrap}
   <section id="recepty" hidden>
     <a class="back" href="#">‹ Späť</a>
     <h2>Recepty</h2>
-    <div class="empty"><strong>Zatiaľ tu nie sú žiadne recepty.</strong>Tu pribudne databáza koláčov s receptami a fotkami.</div>
+    <div id="rc-body"></div>
   </section>
 
   <section id="normy" hidden>
@@ -334,6 +339,7 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(t==="vyplaty")renderV();
     if(t==="zaloha")openZ();
     if(t==="naklady-suroviny"){srEdit=null;renderSR()}
+    if(t==="recepty"){rcView=null;rcDraft=null;renderR()}
     if(t.indexOf("cennik-")===0){cnEdit=null;renderC(t.slice(7))}
     window.scrollTo(0,0);
   }
@@ -416,12 +422,12 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
       arr.sort(function(a,b){return (a.no||0)-(b.no||0)});
       S.orders=arr;gotOrders=true;refresh();
     },fail));
-    startV();startC();startZ();startSR();
+    startV();startC();startZ();startSR();startR();
   }
   function stop(){
     unsubs.forEach(function(u){u()});unsubs=[];started=false;gotCfg=false;gotOrders=false;
     S={cakes:[],boxes:[],orders:[],pair:105,rez:0};lastCfg="";lastOrders={};editId=null;
-    stopV();stopC();stopZ();stopSR();
+    stopV();stopC();stopZ();stopSR();stopR();
   }
   function initAuth(){
     var lg=document.getElementById("login"),msg=document.getElementById("loginMsg"),form=document.getElementById("loginForm");
@@ -698,6 +704,129 @@ import {initializeFirestore,persistentLocalCache,persistentMultipleTabManager,do
     if(!pending)return;
     setTimeout(function(){if(inField())return;pending=false;render()},600);
   });
+  /* ---- Recepty ---- */
+  // Údaje: apps/recepty {items:[{id,name,cat,yield,box,cakeId,parts:[{t,ingr,steps}],note}]}; texty receptov sú len vo Firebase
+  var RC={items:[]},rcGot=false,rcUn=null,rcView=null,rcDraft=null,rcQ="",rcPend=false;
+  var rcRef=cfgOk?doc(db,"apps","recepty"):null;
+  function startR(){
+    if(rcUn||!cfgOk)return;
+    rcUn=onSnapshot(rcRef,function(snap){RC={items:snap.exists()?(snap.data().items||[]):[]};rcGot=true;rcRefresh()},fail);
+  }
+  function stopR(){if(rcUn)rcUn();rcUn=null;rcGot=false;rcView=null;rcDraft=null;RC={items:[]}}
+  function rcSave(){setDoc(rcRef,JSON.parse(ser(RC))).catch(fail)}
+  function rcItem(id){return RC.items.filter(function(x){return x.id===id})[0]}
+  function rcIn(){var a=document.activeElement;return !!(a&&a.closest&&a.closest("#rc-body")&&/INPUT|SELECT|TEXTAREA/.test(a.tagName)&&a.id!=="rcQ")}
+  function rcRefresh(){if(document.getElementById("recepty").hidden)return;if(rcDraft||rcIn()){rcPend=true;return}renderR()}
+  function rcTxt(t){return '<div class="cn-x">'+esc(t||"")+'</div>'}
+  function renderR(){
+    var el=document.getElementById("rc-body");
+    if(!rcGot){el.innerHTML='<div class="empty">Načítavam údaje…</div>';return}
+    if(rcDraft){el.innerHTML=rcEditView();return}
+    var r=rcView&&rcItem(rcView);
+    el.innerHTML=r?rcDetail(r):rcList();
+    if(!r)rcFilter();
+  }
+  function rcList(){
+    var h='<div class="form"><input class="grow" id="rcQ" type="search" placeholder="Hľadať recept" value="'+esc(rcQ)+'"><button class="btn" data-act="rNew">Pridať recept</button></div>';
+    if(!RC.items.length)h+='<div class="empty"><strong>Zatiaľ tu nie sú žiadne recepty.</strong>Pridaj recept alebo ich nahraj zo súboru.</div>';
+    var cats=[];RC.items.forEach(function(r){var c=r.cat||"Bez kategórie";if(cats.indexOf(c)<0)cats.push(c)});
+    cats.sort(function(a,b){return a.localeCompare(b,"sk")}).forEach(function(c){
+      h+='<div class="rc-cat"><h3 class="kh" style="margin-top:18px">'+esc(c)+'</h3>';
+      RC.items.filter(function(r){return (r.cat||"Bez kategórie")===c}).forEach(function(r){
+        h+='<button class="row kb rc" data-act="rOpen" data-id="'+r.id+'" data-s="'+esc(cnPlain(r.name))+'"><span><span class="kt">'+esc(r.name)+'</span><span class="small">'+esc([r.yield,r.box].filter(Boolean).join(" · "))+'</span></span><span aria-hidden="true">›</span></button>';
+      });
+      h+='</div>';
+    });
+    h+='<div class="card"><h3>Nahrať recepty zo súboru</h3><div class="small">Súbor macka-recepty (JSON). Recepty s rovnakým názvom sa nahradia, ostatné pribudnú.</div><div class="form"><input type="file" id="rcFile" accept="application/json,.json"></div></div>';
+    return h;
+  }
+  function rcFilter(){
+    var q=cnPlain(rcQ.trim());
+    document.querySelectorAll("#rc-body .rc-cat").forEach(function(g){
+      var any=false;g.querySelectorAll("button.rc").forEach(function(b){var ok=!q||b.dataset.s.indexOf(q)>=0;b.hidden=!ok;if(ok)any=true});g.hidden=!any;
+    });
+  }
+  function rcDetail(r){
+    var h='<button class="back" data-act="rBack">‹ Recepty</button><div class="card"><div class="cn-h"><h3>'+esc(r.name)+'</h3><button class="x" data-act="rEdit">Upraviť</button></div>';
+    var meta=[r.cat,r.yield,r.box].filter(Boolean);if(meta.length)h+='<div class="small">'+esc(meta.join(" · "))+'</div>';
+    var ck=r.cakeId&&gotCfg?cake(r.cakeId):null;
+    if(ck&&ck.items.length){var cc=cakeCost(ck);h+='<div class="small" style="margin-top:4px"><strong>Suroviny podľa normy: '+e2(cc.pc)+'/ks</strong>'+(cc.miss?' <span class="warn">(niektoré bez ceny)</span>':'')+'</div>'}
+    (r.parts||[]).forEach(function(p){
+      h+='<div class="rc-part">'+(p.t?'<h4>'+esc(p.t)+'</h4>':'');
+      if(p.ingr)h+='<div class="rc-lbl">Suroviny</div>'+rcTxt(p.ingr);
+      if(p.steps)h+='<div class="rc-lbl">Postup</div>'+rcTxt(p.steps);
+      h+='</div>';
+    });
+    if(r.note)h+='<div class="rc-part"><div class="rc-lbl">Poznámka</div>'+rcTxt(r.note)+'</div>';
+    return h+'</div>';
+  }
+  function rcEditView(){
+    var d=rcDraft,h='<button class="back" data-act="rCancel">‹ Zrušiť</button><div class="card rc-ed"><h3>'+(d.id?'Upraviť recept':'Nový recept')+'</h3>';
+    h+='<div class="vgrid"><label class="full">Názov<input id="rName" value="'+esc(d.name||"")+'"></label><label>Kategória<input id="rCat" value="'+esc(d.cat||"")+'" placeholder="napr. Vianoce 2026"></label><label>Výťažnosť<input id="rYield" value="'+esc(d.yield||"")+'" placeholder="napr. z dávky 45 ks"></label><label>Balenie<input id="rBox" value="'+esc(d.box||"")+'" placeholder="napr. 10 ks v krabičke"></label>';
+    h+='<label class="full">Prepojiť s koláčom (cena surovín)<select id="rCake"><option value="">—</option>'+S.cakes.map(function(c){return '<option value="'+c.id+'"'+(d.cakeId===c.id?' selected':'')+'>'+esc(c.name)+'</option>'}).join("")+'</select></label></div>';
+    (d.parts||[]).forEach(function(p,i){
+      h+='<div class="rc-part rc-p" style="border-top:1px solid var(--line);padding-top:10px"><div class="vgrid"><label class="full">Časť<input class="p-t" value="'+esc(p.t||"")+'" placeholder="napr. Korpus"></label><label class="full">Suroviny<textarea class="p-ingr">'+esc(p.ingr||"")+'</textarea></label><label class="full">Postup<textarea class="p-steps">'+esc(p.steps||"")+'</textarea></label></div><button class="x" data-act="rDelPart" data-i="'+i+'">Zmazať časť</button></div>';
+    });
+    h+='<div class="form"><button class="btn ghost" data-act="rAddPart">Pridať časť</button></div>';
+    h+='<div class="vgrid"><label class="full">Poznámka<textarea id="rNote">'+esc(d.note||"")+'</textarea></label></div>';
+    h+='<div class="form"><button class="btn" data-act="rSave">Uložiť</button><button class="btn ghost" data-act="rCancel">Zrušiť</button>'+(d.id?'<button class="x" data-act="rDel">Zmazať recept</button>':'')+'</div></div>';
+    return h;
+  }
+  function rcRead(){
+    var d=rcDraft,v=function(id){return document.getElementById(id).value.trim()};
+    d.name=v("rName");d.cat=v("rCat");d.yield=v("rYield");d.box=v("rBox");d.cakeId=document.getElementById("rCake").value;d.note=document.getElementById("rNote").value.trim();
+    d.parts=[];document.querySelectorAll("#rc-body .rc-p").forEach(function(el){d.parts.push({t:el.querySelector(".p-t").value.trim(),ingr:el.querySelector(".p-ingr").value.trim(),steps:el.querySelector(".p-steps").value.trim()})});
+  }
+  function rcClean(r){
+    var o={id:r.id||uid(),name:String(r.name||"").trim(),cat:String(r.cat||"").trim(),yield:String(r.yield||"").trim(),box:String(r.box||"").trim(),cakeId:String(r.cakeId||""),note:String(r.note||"").trim(),parts:[]};
+    (r.parts||[]).forEach(function(p){var q={t:String(p.t||"").trim(),ingr:String(p.ingr||"").trim(),steps:String(p.steps||"").trim()};if(q.t||q.ingr||q.steps)o.parts.push(q)});
+    return o;
+  }
+  document.getElementById("rc-body").addEventListener("input",function(e){if(e.target.id==="rcQ"){rcQ=e.target.value;rcFilter()}});
+  document.getElementById("rc-body").addEventListener("focusout",function(){if(!rcPend)return;setTimeout(function(){if(rcIn()||rcDraft)return;rcPend=false;renderR()},600)});
+  document.getElementById("rc-body").addEventListener("click",function(e){
+    var t=e.target.closest("button");if(!t||!t.dataset.act||!rcGot)return;
+    var a=t.dataset.act;
+    if(a==="rOpen"){rcView=t.dataset.id;renderR();window.scrollTo(0,0);return}
+    if(a==="rBack"){rcView=null;renderR();window.scrollTo(0,0);return}
+    if(a==="rNew"){rcDraft={parts:[{t:"",ingr:"",steps:""}]};renderR();window.scrollTo(0,0);return}
+    if(a==="rEdit"){var r0=rcItem(rcView);if(!r0)return;rcDraft=JSON.parse(JSON.stringify(r0));if(!rcDraft.parts||!rcDraft.parts.length)rcDraft.parts=[{t:"",ingr:"",steps:""}];renderR();return}
+    if(a==="rCancel"){if(!confirm("Zahodiť zmeny?"))return;rcDraft=null;rcPend=false;renderR();window.scrollTo(0,0);return}
+    if(!rcDraft)return;
+    rcRead();
+    if(a==="rAddPart"){rcDraft.parts.push({t:"",ingr:"",steps:""});renderR();return}
+    if(a==="rDelPart"){rcDraft.parts.splice(+t.dataset.i,1);renderR();return}
+    if(a==="rSave"){
+      if(!rcDraft.name){alert("Zadaj názov receptu.");return}
+      var r=rcClean(rcDraft),i=RC.items.findIndex(function(x){return x.id===r.id});
+      if(i>=0)RC.items[i]=r;else RC.items.push(r);
+      rcSave();rcDraft=null;rcPend=false;rcView=r.id;renderR();window.scrollTo(0,0);toast("Recept uložený");return;
+    }
+    if(a==="rDel"){
+      if(!confirm("Zmazať recept „"+rcDraft.name+"“?"))return;
+      var id=rcDraft.id;RC.items=RC.items.filter(function(x){return x.id!==id});rcSave();rcDraft=null;rcView=null;renderR();window.scrollTo(0,0);
+    }
+  });
+  document.getElementById("rc-body").addEventListener("change",function(e){
+    if(e.target.id!=="rcFile")return;
+    var f=e.target.files[0];if(!f)return;
+    var fr=new FileReader();
+    fr.onload=function(){
+      try{
+        var d=JSON.parse(fr.result);
+        if(!d||d.app!=="macka-recepty"||!Array.isArray(d.items))throw new Error("zlý súbor");
+        var list=d.items.filter(function(x){return x&&x.name}).map(rcClean);
+        if(!list.length)throw new Error("prázdny");
+        var nw=0,up=0,arr=RC.items.slice();
+        list.forEach(function(r){var o=arr.filter(function(x){return cnPlain(x.name)===cnPlain(r.name)})[0];if(o){r.id=o.id;arr[arr.indexOf(o)]=r;up++}else{arr.push(r);nw++}});
+        if(!confirm("Nahrať recepty? Nových: "+nw+", nahradí sa: "+up+"."))return;
+        RC.items=arr;rcSave();renderR();toast("Recepty nahraté ("+list.length+")");
+      }catch(err){toast("Súbor s receptami sa nepodarilo načítať")}
+      e.target.value="";
+    };
+    fr.readAsText(f);
+  });
+
   /* ---- Suroviny (katalóg) ---- */
   // Údaje: apps/suroviny {items:[{id,name,unit:kg|l|ks,pack,price,sup,note}]}; price = € s DPH za balenie (pack v jednotke unit)
   // Norma koláča: cake.batch = ks z dávky (chýba = 1), cake.items[{name,qty,unit:g|kg|ml|l|ks,ingId}]

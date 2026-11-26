@@ -27,13 +27,14 @@
   - Dochádzka: Apps Script `google-apps-script/Dochadzka.gs` (priečinok „Mackine Torty“ na Drive, Sheet na osobu, hárky podľa mesiacov). `people.sheet` = názov Sheetu, `gs` = URL a kľúč skriptu (len vo Firebase). Načíta dni, hodiny, nedele, hodiny v sobotu a v nedeľu, sviatok (zelená farba), dovolenku a paragraf (poznámka) a posiela výplatu e-mailom.
   - `apps/cennik`: `{src, napSeed, kolDel, torty:[…], kolace:[…], napoje:[…]}`; položka `{id, name, desc, valid, flav, note, vars:[{n, d, p, od, u, min}]}`
   - `apps/suroviny`: `{items:[{id, name, unit: kg|l|ks, pack, price, sup, note}]}` – katalóg surovín, `price` = € s DPH za balenie `pack`. Normy sa párujú podľa `ingId`, inak podľa názvu.
+  - `apps/recepty`: `{items:[{id, name, cat, yield, box, cakeId, parts:[{t, ingr, steps}], note}]}` – recepty (texty len vo Firebase, nikdy v kóde), `cakeId` = prepojenie na koláč vo Vianociach (cena surovín). Nahrávanie zo súboru `macka-recepty` (JSON).
   - `apps/nastavenia`: staré, nepoužíva sa.
   - `apps/zaloha`: `{last, file, size, docs, err, errAt}` – stav zálohy, zapisuje ho len Apps Script.
 - Záloha: `Dochadzka.gs` (+ manifest `google-apps-script/appsscript.json` so scope `datastore`) každú noc o 3:00 cez Firestore REST pod účtom vlastníka projektu uloží všetko z `apps/**` (bez `apps/zaloha` a bez `gs.token`) do priečinka „Macka. zálohy“ na Drive ako `macka-zaloha-RRRR-MM-DD.json`, drží 30 dní. Sekcia Záloha v appke: stav, zoznam, stiahnutie, obnova (najprv záloha aktuálneho stavu). Upozornenie v menu, ak je záloha staršia ako 7 dní.
 - Zmeny v `cennik-web.js` sa do existujúcej databázy nepremietnu samé (treba jednorazovú úpravu s príznakom ako `napSeed`/`kolDel`, alebo úpravu v appke).
 
 ## Sekcie (hlavné menu)
-Vianoce 2026 (hotové; Koláče: krabička → koláč → detail so surovinami a cenou za kus; nákupný zoznam s cenami a marža krabičiek), Recepty (prázdne), Normy (prázdne), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
+Vianoce 2026 (hotové; Koláče: krabička → koláč → detail so surovinami a cenou za kus; nákupný zoznam s cenami a marža krabičiek), Recepty (zoznam podľa kategórií, detail s časťami, úprava, nahratie zo súboru; fotky zatiaľ nie), Normy (prázdne), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
 Kalendár a Správy boli zámerne odstránené, nevracať ich.
 
 ## Výplaty – výpočet
