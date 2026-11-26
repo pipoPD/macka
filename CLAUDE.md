@@ -22,17 +22,18 @@
 - Projekt `mackine-torty` (plán Spark, bez automatických záloh), SDK 10.14.1 z gstatic, offline cache zapnutá.
 - Prihlásenie e-mail + heslo, 2 účty. Firestore pravidlá povoľujú len tieto dva účty (cesta `apps/**`).
 - Dokumenty:
-  - `apps/vianoce2026`: `{cakes, boxes, pair}`; objednávky v `apps/vianoce2026/orders/{id}`: `{no, name, contact, lines[{kind: box|mix|cake, id, qty, note}], price, note}`
+  - `apps/vianoce2026`: `{cakes, boxes, pair, rez}`; koláč `{id, name, batch, items[{name, qty, unit: g|kg|ml|l|ks, ingId}]}` – norma na 1 dávku, `batch` = ks z dávky (chýba = 1), `ingId` = surovina z katalógu, `rez` = rezerva na straty v %; objednávky v `apps/vianoce2026/orders/{id}`: `{no, name, contact, lines[{kind: box|mix|cake, id, qty, note}], price, note}`
   - `apps/vyplaty`: `{people:[{id, name, type: emp|brig, rate, meal, sun, wkd, satp, sunp, dov, par, dovN, active, sheet, email}], gs:{url, token}}`; mesiace v `apps/vyplaty/months/{RRRR-MM}`: `{entries:{osobaId:{days, hours, sundays, sat, sunh, wkd, hol, vac, par, rew, candy, extra, note, imported, sent, rt:{rate,meal,sun,wkd,satp,sunp}} alebo {fixed: suma}}}`
   - Dochádzka: Apps Script `google-apps-script/Dochadzka.gs` (priečinok „Mackine Torty“ na Drive, Sheet na osobu, hárky podľa mesiacov). `people.sheet` = názov Sheetu, `gs` = URL a kľúč skriptu (len vo Firebase). Načíta dni, hodiny, nedele, hodiny v sobotu a v nedeľu, sviatok (zelená farba), dovolenku a paragraf (poznámka) a posiela výplatu e-mailom.
   - `apps/cennik`: `{src, napSeed, kolDel, torty:[…], kolace:[…], napoje:[…]}`; položka `{id, name, desc, valid, flav, note, vars:[{n, d, p, od, u, min}]}`
+  - `apps/suroviny`: `{items:[{id, name, unit: kg|l|ks, pack, price, sup, note}]}` – katalóg surovín, `price` = € s DPH za balenie `pack`. Normy sa párujú podľa `ingId`, inak podľa názvu.
   - `apps/nastavenia`: staré, nepoužíva sa.
   - `apps/zaloha`: `{last, file, size, docs, err, errAt}` – stav zálohy, zapisuje ho len Apps Script.
 - Záloha: `Dochadzka.gs` (+ manifest `google-apps-script/appsscript.json` so scope `datastore`) každú noc o 3:00 cez Firestore REST pod účtom vlastníka projektu uloží všetko z `apps/**` (bez `apps/zaloha` a bez `gs.token`) do priečinka „Macka. zálohy“ na Drive ako `macka-zaloha-RRRR-MM-DD.json`, drží 30 dní. Sekcia Záloha v appke: stav, zoznam, stiahnutie, obnova (najprv záloha aktuálneho stavu). Upozornenie v menu, ak je záloha staršia ako 7 dní.
 - Zmeny v `cennik-web.js` sa do existujúcej databázy nepremietnu samé (treba jednorazovú úpravu s príznakom ako `napSeed`/`kolDel`, alebo úpravu v appke).
 
 ## Sekcie (hlavné menu)
-Vianoce 2026 (hotové), Recepty (prázdne), Normy (prázdne), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Cukráreň/Firma/Suroviny (prázdne).
+Vianoce 2026 (hotové, vrátane nákupného zoznamu s cenami a marže krabičiek), Recepty (prázdne), Normy (prázdne), Cenník – Torty/Koláče/Nápoje (hotové), Výplaty (hotové), Záloha (hotová), Náklady – Suroviny (katalóg s cenami, hotový), Cukráreň/Firma (prázdne).
 Kalendár a Správy boli zámerne odstránené, nevracať ich.
 
 ## Výplaty – výpočet
